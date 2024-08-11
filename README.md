@@ -4,47 +4,63 @@ Whisper Transcription GUI is a powerful and user-friendly application that lever
 
 ## Features
 
-🎧 Supports multiple audio formats (.mp3, .wav, .m4a, .flac, .ogg)
-🌐 Auto-detection of language and translation to English
-🔢 Batch processing of audio files
-🎚️ Adjustable temperature settings for transcription accuracy
-💻 CPU usage optimization options
-📊 Progress tracking and time estimation
-📁 Organized output structure mirroring input folders
+- 🎧 Supports multiple audio formats (.mp3, .wav, .m4a, .flac, .ogg)
+- 🌐 Auto-detection of language and translation to English
+- 🔢 Batch processing of audio files
+- 🎚️ Adjustable temperature settings for transcription accuracy
+- 💻 CPU usage optimization options
+- 📊 Progress tracking and time estimation
+- 📁 Organized output structure mirroring input folders
 
 ## Requirements
 
-Python 3.8+ PyQt6 transformers torch mutagen psutil
+- Python 3.8+
+- PyQt6
+- transformers
+- torch
+- mutagen
+- psutil
 
 ## Installation
 
-Clone the repository
-```console
-$ git clone https://github.com/stdelprato/whisper-transcription.git $ cd whisper-transcription-gui
+1. Clone the repository
+   ```
+   $ git clone https://github.com/stdelprato/whisper-transcription.git
+   $ cd whisper-transcription-gui
+   ```
 
-# Create and activate a virtual environment (optional but recommended)
-$ python -m venv venv $ source venv/bin/activate # On Windows, use `venv\Scripts\activate`
+2. Create and activate a virtual environment (optional but recommended)
+   ```
+   $ python -m venv venv
+   $ source venv/bin/activate  # On Windows, use ``` venv\Scripts\activate ```
+   ```
 
-# Install the required packages
-$ pip install -r requirements.txt
+3. Install the required packages
+   ```
+   $ pip install -r requirements.txt
+   ```
 
+## Usage
 
-Usage
+1. Run the application
+   ```
+   $ python main.py
+   ```
 
-# Run the application
-$ python main.py
+2. The GUI will now open. Follow these steps:
+   - Click "Explorar" to select a folder with audio files
+   - Choose language settings
+   - Adjust temperature if needed
+   - Click "Transcribir todos" or select specific files
+   - Wait for transcription to complete
+   - Find output in the "results" folder
 
-The GUI will now open. Follow these steps:
-1. Click "Explorar" to select a folder with audio files
-2. Choose language settings
-3. Adjust temperature if needed
-4. Click "Transcribir todos" or select specific files
-5. Wait for transcription to complete
-6. Find output in the "results" folder
+## Contributing
 
-Contributing
 Contributions are welcome! Please feel free to submit a Pull Request.
-License
+
+## License
+
 This project is licensed under the MIT License - see the LICENSE file for details.
 
 Built with ❤️ using OpenAI's Whisper model and PyQt6
