@@ -1,0 +1,309 @@
+import os
+import json
+from utils.audio_utils import get_audio_duration, format_duration
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QMainWindow, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
+from gui.ui_components import setup_ui, setup_connections, set_style
+from core.file_loader import LoadFilesThread
+from core.transcriber import TranscriptionThread
+from core.whisper_model import load_whisper_model
+from utils.audio_utils import get_audio_duration
+from utils.time_utils import format_time
+import config
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        
+        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.json_path = os.path.join(self.base_dir, 'transcription_data.json')
+        
+        print(f"JSON path: {self.json_path}")  # Debug print
+        
+        self.setWindowTitle(config.APP_TITLE)
+        self.setGeometry(100, 100, 800, 600)
+
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+
+        self.total_transcription_time = 0
+        self.total_audio_duration = 0
+
+        self.pipe = None
+        self.audio_files = []
+        self.current_language = None
+        self.translate_to_english = False
+        self.load_thread = None
+
+        self.transcription_data = self.load_transcription_data()
+
+        self.cpu_mode_layout = QHBoxLayout()
+        self.cpu_mode_label = QLabel("Modo CPU:")
+        self.cpu_mode_combo = QComboBox()
+        self.cpu_mode_combo.addItems(["Modo Ahorro (75%)", "Modo Rendimiento (100%)"])
+        self.cpu_mode_layout.addWidget(self.cpu_mode_label)
+        self.cpu_mode_layout.addWidget(self.cpu_mode_combo)
+        self.layout.addLayout(self.cpu_mode_layout)
+
+        setup_ui(self)
+        self.auto_detect_btn.setChecked(True)
+        self.set_auto_detect()
+        self.update_transcribe_buttons()
+        setup_connections(self)
+        self.update_button_states()
+
+        set_style(self)
+        
+        self.estimate_label = QLabel("Tiempo estimado: N/A")
+        self.layout.addWidget(self.estimate_label)
+        
+        self.elapsed_time_label = QLabel("Tiempo transcurrido: 00:00")
+        self.layout.addWidget(self.elapsed_time_label)
+        
+        self.elapsed_timer = QTimer(self)
+        self.elapsed_timer.timeout.connect(self.update_elapsed_time)
+        self.elapsed_seconds = 0
+
+        self.transcription_data = self.load_transcription_data()
+
+    def set_auto_detect(self):
+        is_auto_detect = self.auto_detect_btn.isChecked()
+        self.es_btn.setEnabled(not is_auto_detect)
+        self.en_btn.setEnabled(not is_auto_detect)
+        self.auto_btn.setEnabled(not is_auto_detect)
+        self.translate_btn.setEnabled(not is_auto_detect)
+        self.no_translate_btn.setEnabled(not is_auto_detect)
+        if is_auto_detect:
+            self.current_language = None
+            self.translate_to_english = True
+            self.es_btn.setChecked(False)
+            self.en_btn.setChecked(False)
+            self.auto_btn.setChecked(False)
+            self.translate_btn.setChecked(False)
+            self.no_translate_btn.setChecked(False)
+        self.update_button_states()
+
+    def estimate_transcription_time(self, audio_duration):
+        if self.total_audio_duration == 0:
+            return "Unknown"
+        
+        avg_speed = self.total_transcription_time / self.total_audio_duration
+        estimated_time = audio_duration * avg_speed
+        return format_time(estimated_time)
+
+    def update_temperature(self, value):
+        temperature = max(0.000001, (value - 1) * 0.1)
+        self.temp_label.setText(f"Temperatura: {temperature:.6f}")
+
+    def update_elapsed_time(self):
+        self.elapsed_seconds += 1
+        self.elapsed_time_label.setText(f"Tiempo transcurrido: {format_duration(self.elapsed_seconds)}")
+
+    def update_progress(self, current, total):
+        percentage = (current / total) * 100
+        self.progress_bar.setValue(int(percentage))
+        self.progress_bar.setFormat(f"{percentage:.2f}% ({current}/{total} archivos)")
+
+    def browse_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Seleccionar carpeta de audio")
+        if folder:
+            self.folder_input.setText(folder)
+            QApplication.processEvents()
+            self.load_files(folder)
+    
+    def load_files(self, directory):
+        self.file_list.clear()
+        self.audio_files = []
+        
+        if self.load_thread and self.load_thread.isRunning():
+            self.load_thread.requestInterruption()
+            self.load_thread.wait()
+        
+        self.load_thread = LoadFilesThread(directory)
+        self.load_thread.file_found.connect(self.add_file_to_list)
+        self.load_thread.finished.connect(self.on_file_loading_finished)
+        
+        self.setEnabled(False)
+        
+        self.load_thread.start()
+
+    def closeEvent(self, event):
+        if self.load_thread and self.load_thread.isRunning():
+            self.load_thread.requestInterruption()
+            self.load_thread.wait()
+        event.accept()
+
+    def add_file_to_list(self, file_path, relative_path):
+        duration = get_audio_duration(file_path)
+        duration_str = format_time(duration)
+        
+        if relative_path == '.':
+            item_text = f"({duration_str}) | {os.path.basename(file_path)}"
+        else:
+            item_text = f"({duration_str}) | {relative_path} > {os.path.basename(file_path)}"
+        
+        self.file_list.addItem(item_text)
+        self.audio_files.append((file_path, duration))
+
+    def on_file_loading_finished(self):
+        self.setEnabled(True)
+        self.update_transcribe_buttons()
+
+    def set_language(self, lang):
+        self.current_language = lang
+        self.es_btn.setChecked(lang == 'es')
+        self.en_btn.setChecked(lang == 'en')
+        self.auto_btn.setChecked(lang is None)
+        
+        if lang == 'es':
+            self.set_translation(True)
+        else:
+            self.set_translation(False)
+        
+        self.update_button_states()
+
+    def set_translation(self, translate):
+        self.translate_to_english = translate
+        self.translate_btn.setChecked(translate)
+        self.no_translate_btn.setChecked(not translate)
+
+    def update_button_states(self):
+        is_spanish = self.current_language == 'es'
+        self.translate_btn.setEnabled(is_spanish)
+        self.no_translate_btn.setEnabled(is_spanish)
+        if is_spanish:
+            if not self.translate_btn.isChecked() and not self.no_translate_btn.isChecked():
+                self.translate_btn.setChecked(True)
+                self.no_translate_btn.setChecked(False)
+                self.translate_to_english = True
+        else:
+            self.translate_btn.setChecked(False)
+            self.no_translate_btn.setChecked(True)
+            self.translate_to_english = False
+
+    def update_transcribe_buttons(self):
+        selected_items = self.file_list.selectedItems()
+        self.transcribe_selected_btn.setVisible(len(selected_items) > 0)
+        
+        self.transcribe_all_btn.setStyleSheet(
+            "background-color: #2d8659; color: white;"
+        )
+        
+        if len(selected_items) > 0:
+            self.transcribe_selected_btn.setStyleSheet(
+                "background-color: #1a5f7a; color: white;"
+            )
+            self.trans_btn_layout.setStretch(0, 80)
+            self.trans_btn_layout.setStretch(1, 20)
+        else:
+            self.trans_btn_layout.setStretch(0, 0)
+            self.trans_btn_layout.setStretch(1, 100)
+
+    def transcribe(self, selected=True):
+        if not self.audio_files:
+            self.output_text.append("No hay archivos de audio cargados.")
+            return
+
+        if not self.pipe:
+            self.output_text.append("Cargando modelo Whisper large-v3...")
+            self.load_whisper_model()
+
+        files_to_transcribe = [item.text().split(' | ', 1)[1] for item in self.file_list.selectedItems()] if selected else [self.file_list.item(i).text().split(' | ', 1)[1] for i in range(self.file_list.count())]
+        
+        if not files_to_transcribe:
+            self.output_text.append("No se han seleccionado archivos para transcribir.")
+            return
+
+        self.output_text.append("Iniciando transcripción...")
+        temperature = max(0.000001, (self.temp_slider.value() - 1) * 0.1)
+        base_output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", os.path.basename(self.folder_input.text()))
+
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
+        
+        self.elapsed_seconds = 0
+        self.elapsed_timer.start(1000)
+        
+        cpu_limit = "75%" if self.cpu_mode_combo.currentText() == "Modo Ahorro (75%)" else "100%"
+        
+        self.transcription_thread = TranscriptionThread(
+            self.pipe, files_to_transcribe, self.folder_input.text(), 
+            self.current_language, self.translate_to_english, temperature, 
+            self.auto_detect_btn.isChecked(), base_output_dir, cpu_limit
+        )
+        self.transcription_thread.transcription_done.connect(self.on_transcription_done)
+        self.transcription_thread.all_transcriptions_done.connect(self.on_all_transcriptions_done)
+        self.transcription_thread.progress_update.connect(self.update_progress)
+        self.transcription_thread.start()
+
+    def load_whisper_model(self):
+        self.pipe = load_whisper_model()
+
+    def on_transcription_done(self, file_path, transcription_time, audio_duration):
+        cpu_mode = "75%" if self.cpu_mode_combo.currentText() == "Modo Ahorro (75%)" else "100%"
+        temperature = max(0.000001, (self.temp_slider.value() - 1) * 0.1)
+        
+        self.transcription_data[file_path] = {
+            'duration': audio_duration,
+            'transcription_time': transcription_time,
+            'cpu_mode': cpu_mode,
+            'temperature': temperature
+        }
+        self.save_transcription_data()
+        self.update_estimate()
+        
+        self.output_text.append(f"Transcripción completada: {file_path}")
+        self.output_text.append(f"Duración del audio: {format_duration(audio_duration)}")
+        self.output_text.append(f"Tiempo de transcripción: {format_duration(transcription_time)}")
+        self.output_text.append(f"Modo CPU: {cpu_mode}")
+        self.output_text.append(f"Temperatura: {temperature:.6f}")
+
+    def load_transcription_data(self):
+        try:
+            with open(self.json_path, 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
+        
+    def save_transcription_data(self):
+        with open(self.json_path, 'w') as f:
+            json.dump(self.transcription_data, f)
+            
+    def update_estimate(self):
+        selected_items = self.file_list.selectedItems()
+        if not selected_items:
+            self.estimate_label.setText("Tiempo estimado: N/A")
+            return
+        
+        current_cpu_mode = "75%" if self.cpu_mode_combo.currentText() == "Modo Ahorro (75%)" else "100%"
+        current_temperature = max(0.000001, (self.temp_slider.value() - 1) * 0.1)
+        
+        matching_transcriptions = [
+            data for data in self.transcription_data.values()
+            if data['cpu_mode'] == current_cpu_mode and abs(data['temperature'] - current_temperature) < 0.01
+        ]
+        
+        if len(matching_transcriptions) < 5:
+            self.estimate_label.setText("Tiempo estimado: N/A (Datos insuficientes)")
+            return
+        
+        total_duration = sum(float(item.text().split('(')[1].split(')')[0].split(':')[0]) * 3600 +
+                            float(item.text().split('(')[1].split(')')[0].split(':')[1]) * 60 +
+                            float(item.text().split('(')[1].split(')')[0].split(':')[2])
+                            for item in selected_items)
+        
+        avg_speed = sum(data['transcription_time'] / data['duration'] for data in matching_transcriptions) / len(matching_transcriptions)
+        estimated_time = total_duration * avg_speed
+        
+        self.estimate_label.setText(f"Tiempo estimado: {format_duration(estimated_time)}")
+
+    def on_all_transcriptions_done(self):
+        self.output_text.append("COMPLETADO.")
+        self.progress_bar.setVisible(False)
+        self.elapsed_timer.stop()
+
+    def clear_output(self):
+        self.output_text.clear()
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(False)
