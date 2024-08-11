@@ -21,35 +21,30 @@ psutil
 
 Installation
 
-Clone the repository:
-Copygit clone https://github.com/yourusername/whisper-transcription-gui.git
-cd whisper-transcription-gui
+# Clone the repository
+$ git clone https://github.com/yourusername/whisper-transcription-gui.git
+$ cd whisper-transcription-gui
 
-Create a virtual environment (optional but recommended):
-Copypython -m venv venv
-source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+# Create and activate a virtual environment (optional but recommended)
+$ python -m venv venv
+$ source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
 
-Install the required packages:
-Copypip install -r requirements.txt
+# Install the required packages
+$ pip install -r requirements.txt
 
 
 Usage
 
-Run the application:
-Copypython main.py
+# Run the application
+$ python main.py
 
-Use the "Explorar" button to select a folder containing audio files.
-Choose your language settings:
-
-Select "Español" or "Inglés" for specific languages
-Use "Auto-detectar" for automatic language detection
-Enable "Traducir a Inglés" for translation to English
-
-
-Adjust the temperature setting if needed (higher values increase creativity but may reduce accuracy).
-Select individual files or use "Transcribir todos" to process all files.
-Monitor progress in the output text area and progress bar.
-Find transcribed text files in the "results" folder, organized to mirror your input folder structure.
+# The GUI will now open. Follow these steps:
+# 1. Click "Explorar" to select a folder with audio files
+# 2. Choose language settings
+# 3. Adjust temperature if needed
+# 4. Click "Transcribir todos" or select specific files
+# 5. Wait for transcription to complete
+# 6. Find output in the "results" folder
 
 Contributing
 Contributions are welcome! Please feel free to submit a Pull Request.
