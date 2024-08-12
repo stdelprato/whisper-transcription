@@ -46,16 +46,18 @@ def setup_ui(window):
     window.auto_detect_btn.setChecked(False)
     window.layout.addWidget(window.auto_detect_btn)
 
-    temp_layout = QHBoxLayout()
-    window.temp_label = QLabel("Temperatura: 0.0")
-    window.temp_slider = QSlider(Qt.Orientation.Horizontal)
-    window.temp_slider.setRange(1, 5)
-    window.temp_slider.setValue(1)
-    window.temp_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-    window.temp_slider.setTickInterval(1)
-    temp_layout.addWidget(window.temp_label)
-    temp_layout.addWidget(window.temp_slider)
-    window.layout.addLayout(temp_layout)
+    # Botones para el modo CPU
+    cpu_layout = QHBoxLayout()
+    window.cpu_mode_75 = QPushButton("Modo Ahorro (75%)")
+    window.cpu_mode_100 = QPushButton("Modo Rendimiento (100%)")
+    window.cpu_mode_75.setCheckable(True)
+    window.cpu_mode_100.setCheckable(True)
+    window.cpu_mode_100.setChecked(True)
+    cpu_layout.addWidget(window.cpu_mode_75)
+    cpu_layout.addWidget(window.cpu_mode_100)
+    window.layout.addLayout(cpu_layout)
+
+    # La creación de los botones de calidad de audio se hará en main_window.py
 
     window.trans_btn_layout = QHBoxLayout()
     window.transcribe_selected_btn = QPushButton("Transcribir seleccionados")
@@ -88,8 +90,10 @@ def setup_connections(window):
     window.transcribe_all_btn.clicked.connect(lambda: window.transcribe(selected=False))
     window.file_list.itemSelectionChanged.connect(window.update_transcribe_buttons)
     window.file_list.itemSelectionChanged.connect(window.update_estimate)
-    window.temp_slider.valueChanged.connect(window.update_temperature)
     window.clear_btn.clicked.connect(window.clear_output)
+    
+    window.cpu_mode_75.clicked.connect(lambda: window.set_cpu_mode("75%"))
+    window.cpu_mode_100.clicked.connect(lambda: window.set_cpu_mode("100%"))
 
 def set_style(window):
     base_style = """

@@ -2,7 +2,7 @@ import os
 import json
 from utils.audio_utils import get_audio_duration, format_duration
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QMainWindow, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
+from PyQt6.QtWidgets import QMainWindow, QButtonGroup, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
 from gui.ui_components import setup_ui, setup_connections, set_style
 from core.file_loader import LoadFilesThread
 from core.transcriber import TranscriptionThread
@@ -38,15 +38,8 @@ class MainWindow(QMainWindow):
 
         self.transcription_data = self.load_transcription_data()
 
-        self.cpu_mode_layout = QHBoxLayout()
-        self.cpu_mode_label = QLabel("Modo CPU:")
-        self.cpu_mode_combo = QComboBox()
-        self.cpu_mode_combo.addItems(["Modo Ahorro (75%)", "Modo Rendimiento (100%)"])
-        self.cpu_mode_layout.addWidget(self.cpu_mode_label)
-        self.cpu_mode_layout.addWidget(self.cpu_mode_combo)
-        self.layout.addLayout(self.cpu_mode_layout)
-
         setup_ui(self)
+        self.setup_temperature_selection()  # Añade esta línea
         self.auto_detect_btn.setChecked(True)
         self.set_auto_detect()
         self.update_transcribe_buttons()
@@ -69,19 +62,28 @@ class MainWindow(QMainWindow):
 
     def set_auto_detect(self):
         is_auto_detect = self.auto_detect_btn.isChecked()
-        self.es_btn.setEnabled(not is_auto_detect)
-        self.en_btn.setEnabled(not is_auto_detect)
-        self.auto_btn.setEnabled(not is_auto_detect)
-        self.translate_btn.setEnabled(not is_auto_detect)
-        self.no_translate_btn.setEnabled(not is_auto_detect)
         if is_auto_detect:
-            self.current_language = None
-            self.translate_to_english = True
             self.es_btn.setChecked(False)
             self.en_btn.setChecked(False)
             self.auto_btn.setChecked(False)
             self.translate_btn.setChecked(False)
             self.no_translate_btn.setChecked(False)
+            self.current_language = None
+            self.translate_to_english = True
+        else:
+            # Si se deselecciona, establecer un estado predeterminado
+            self.auto_btn.setChecked(True)
+            self.no_translate_btn.setChecked(True)
+            self.set_language(None)
+            self.set_translation(False)
+        
+        # Deshabilitar/habilitar botones según el estado de auto-detect
+        self.es_btn.setEnabled(not is_auto_detect)
+        self.en_btn.setEnabled(not is_auto_detect)
+        self.auto_btn.setEnabled(not is_auto_detect)
+        self.translate_btn.setEnabled(not is_auto_detect)
+        self.no_translate_btn.setEnabled(not is_auto_detect)
+        
         self.update_button_states()
 
     def estimate_transcription_time(self, audio_duration):
@@ -92,9 +94,52 @@ class MainWindow(QMainWindow):
         estimated_time = audio_duration * avg_speed
         return format_time(estimated_time)
 
-    def update_temperature(self, value):
-        temperature = max(0.000001, (value - 1) * 0.1)
-        self.temp_label.setText(f"Temperatura: {temperature:.6f}")
+    def get_temperature_from_quality(self):
+        for button in self.temp_buttons.buttons():
+            if button.isChecked():
+                quality = button.text()
+                if quality == "Muy bueno":
+                    return 0.000001
+                elif quality == "Bueno":
+                    return 0.1
+                elif quality == "Regular":
+                    return 0.2
+                else:  # Mala
+                    return 0.3
+        return 0.000001  # Default to "Muy bueno" if nothing is selected
+
+    def setup_temperature_selection(self):
+        self.temp_layout = QHBoxLayout()
+        self.temp_label = QLabel("Calidad del audio:")
+        self.temp_layout.addWidget(self.temp_label)
+        
+        self.temp_buttons = QButtonGroup(self)
+        qualities = ["Muy bueno", "Bueno", "Regular", "Mala"]
+        for quality in qualities:
+            btn = QPushButton(quality)
+            btn.setCheckable(True)
+            self.temp_buttons.addButton(btn)
+            self.temp_layout.addWidget(btn)
+        
+        self.temp_buttons.buttonClicked.connect(self.update_temperature)
+        self.temp_buttons.buttons()[0].setChecked(True)  # Set "Muy bueno" as default
+        
+        # Insertar este layout antes de los botones de transcripción
+        insert_index = self.layout.indexOf(self.trans_btn_layout)
+        self.layout.insertLayout(insert_index, self.temp_layout)
+
+    def update_temperature(self, button):
+        for btn in self.temp_buttons.buttons():
+            if btn != button:
+                btn.setChecked(False)
+
+    def set_cpu_mode(self, mode):
+        if mode == "75%":
+            self.cpu_mode_75.setChecked(True)
+            self.cpu_mode_100.setChecked(False)
+        else:
+            self.cpu_mode_75.setChecked(False)
+            self.cpu_mode_100.setChecked(True)
 
     def update_elapsed_time(self):
         self.elapsed_seconds += 1
@@ -161,12 +206,15 @@ class MainWindow(QMainWindow):
         else:
             self.set_translation(False)
         
+        self.auto_detect_btn.setChecked(False)
         self.update_button_states()
 
     def set_translation(self, translate):
         self.translate_to_english = translate
         self.translate_btn.setChecked(translate)
         self.no_translate_btn.setChecked(not translate)
+        self.auto_detect_btn.setChecked(False)
+        self.update_button_states()
 
     def update_button_states(self):
         is_spanish = self.current_language == 'es'
@@ -216,8 +264,8 @@ class MainWindow(QMainWindow):
             return
 
         self.output_text.append("Iniciando transcripción...")
-        temperature = max(0.000001, (self.temp_slider.value() - 1) * 0.1)
-        base_output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", os.path.basename(self.folder_input.text()))
+        temperature = self.get_temperature_from_quality()
+        base_output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "transcription_results")
 
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(True)
@@ -225,7 +273,7 @@ class MainWindow(QMainWindow):
         self.elapsed_seconds = 0
         self.elapsed_timer.start(1000)
         
-        cpu_limit = "75%" if self.cpu_mode_combo.currentText() == "Modo Ahorro (75%)" else "100%"
+        cpu_limit = "75%" if self.cpu_mode_75.isChecked() else "100%"
         
         self.transcription_thread = TranscriptionThread(
             self.pipe, files_to_transcribe, self.folder_input.text(), 
@@ -241,8 +289,8 @@ class MainWindow(QMainWindow):
         self.pipe = load_whisper_model()
 
     def on_transcription_done(self, file_path, transcription_time, audio_duration):
-        cpu_mode = "75%" if self.cpu_mode_combo.currentText() == "Modo Ahorro (75%)" else "100%"
-        temperature = max(0.000001, (self.temp_slider.value() - 1) * 0.1)
+        cpu_mode = "75%" if self.cpu_mode_75.isChecked() else "100%"
+        temperature = self.get_temperature_from_quality()
         
         self.transcription_data[file_path] = {
             'duration': audio_duration,
@@ -268,7 +316,7 @@ class MainWindow(QMainWindow):
         
     def save_transcription_data(self):
         with open(self.json_path, 'w') as f:
-            json.dump(self.transcription_data, f)
+            json.dump(self.transcription_data, f, indent=4)
             
     def update_estimate(self):
         selected_items = self.file_list.selectedItems()
@@ -276,8 +324,8 @@ class MainWindow(QMainWindow):
             self.estimate_label.setText("Tiempo estimado: N/A")
             return
         
-        current_cpu_mode = "75%" if self.cpu_mode_combo.currentText() == "Modo Ahorro (75%)" else "100%"
-        current_temperature = max(0.000001, (self.temp_slider.value() - 1) * 0.1)
+        current_cpu_mode = "75%" if self.cpu_mode_75.isChecked() else "100%"
+        current_temperature = self.get_temperature_from_quality()
         
         matching_transcriptions = [
             data for data in self.transcription_data.values()
@@ -307,3 +355,5 @@ class MainWindow(QMainWindow):
         self.output_text.clear()
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
+        self.elapsed_seconds = 0
+        self.elapsed_time_label.setText("Tiempo transcurrido: 00:00")

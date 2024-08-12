@@ -4,6 +4,9 @@ __pycache__/
 # Ignore the virtual environment directory
 whisper-transcription-env/
 
+transcription_results/
+transcription_data.json
+
 # Ignore .pyc files
 *.pyc
 
