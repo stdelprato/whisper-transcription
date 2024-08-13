@@ -15,8 +15,11 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.json_path = os.path.join(self.base_dir, 'transcription_data.json')
+        # Definir la ruta base (2 niveles arriba de main_window.py)
+        self.base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        # Definir la ruta para transcription_data.json (1 nivel arriba de main_window.py, mismo nivel que main.py)
+        self.json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'transcription_data.json')
         
         print(f"JSON path: {self.json_path}")  # Debug print
         
@@ -39,20 +42,26 @@ class MainWindow(QMainWindow):
         self.transcription_data = self.load_transcription_data()
 
         setup_ui(self)
-        self.setup_temperature_selection()  # Añade esta línea
+        self.setup_temperature_selection()
         self.auto_detect_btn.setChecked(True)
-        self.set_auto_detect()
+        self.on_lang_button_clicked(self.auto_detect_btn)
         self.update_transcribe_buttons()
         setup_connections(self)
         self.update_button_states()
 
         set_style(self)
         
+        time_layout = QHBoxLayout()
+        
         self.estimate_label = QLabel("Tiempo estimado: N/A")
-        self.layout.addWidget(self.estimate_label)
+        time_layout.addWidget(self.estimate_label)
+        
+        time_layout.addStretch()  # Esto empujará el label de tiempo transcurrido hacia la derecha
         
         self.elapsed_time_label = QLabel("Tiempo transcurrido: 00:00")
-        self.layout.addWidget(self.elapsed_time_label)
+        time_layout.addWidget(self.elapsed_time_label)
+        
+        self.layout.addLayout(time_layout)
         
         self.elapsed_timer = QTimer(self)
         self.elapsed_timer.timeout.connect(self.update_elapsed_time)
@@ -60,29 +69,30 @@ class MainWindow(QMainWindow):
 
         self.transcription_data = self.load_transcription_data()
 
-    def set_auto_detect(self):
-        is_auto_detect = self.auto_detect_btn.isChecked()
-        if is_auto_detect:
-            self.es_btn.setChecked(False)
-            self.en_btn.setChecked(False)
-            self.auto_btn.setChecked(False)
-            self.translate_btn.setChecked(False)
-            self.no_translate_btn.setChecked(False)
+    def on_lang_button_clicked(self, button):
+        is_auto_detect_and_translate = button == self.auto_detect_btn
+        
+        self.translate_btn.setEnabled(button == self.es_btn)
+        self.no_translate_btn.setEnabled(button == self.es_btn)
+        
+        if is_auto_detect_and_translate:
             self.current_language = None
             self.translate_to_english = True
-        else:
-            # Si se deselecciona, establecer un estado predeterminado
-            self.auto_btn.setChecked(True)
+            self.translate_btn.setChecked(True)
+            self.no_translate_btn.setChecked(False)
+        elif button == self.es_btn:
+            self.current_language = 'es'
+            # No cambiamos el estado de traducción aquí, se maneja con set_translation
+        elif button == self.en_btn:
+            self.current_language = 'en'
+            self.translate_to_english = False
+            self.translate_btn.setChecked(False)
             self.no_translate_btn.setChecked(True)
-            self.set_language(None)
-            self.set_translation(False)
-        
-        # Deshabilitar/habilitar botones según el estado de auto-detect
-        self.es_btn.setEnabled(not is_auto_detect)
-        self.en_btn.setEnabled(not is_auto_detect)
-        self.auto_btn.setEnabled(not is_auto_detect)
-        self.translate_btn.setEnabled(not is_auto_detect)
-        self.no_translate_btn.setEnabled(not is_auto_detect)
+        else:  # Auto-detectar
+            self.current_language = None
+            self.translate_to_english = False
+            self.translate_btn.setChecked(False)
+            self.no_translate_btn.setChecked(True)
         
         self.update_button_states()
 
@@ -213,7 +223,6 @@ class MainWindow(QMainWindow):
         self.translate_to_english = translate
         self.translate_btn.setChecked(translate)
         self.no_translate_btn.setChecked(not translate)
-        self.auto_detect_btn.setChecked(False)
         self.update_button_states()
 
     def update_button_states(self):
@@ -229,6 +238,50 @@ class MainWindow(QMainWindow):
             self.translate_btn.setChecked(False)
             self.no_translate_btn.setChecked(True)
             self.translate_to_english = False
+    
+    def get_transcription_options(self):
+        for button in self.temp_buttons.buttons():
+            if button.isChecked():
+                quality = button.text()
+                if quality == "Muy bueno":
+                    return {
+                        "temperature": 0.0,
+                        "compression_ratio_threshold": 2.4,
+                        "logprob_threshold": -1.0,
+                        "no_speech_threshold": 0.6,
+                        "condition_on_previous_text": True
+                    }
+                elif quality == "Bueno":
+                    return {
+                        "temperature": 0.1,
+                        "compression_ratio_threshold": 2.3,
+                        "logprob_threshold": -0.95,
+                        "no_speech_threshold": 0.55,
+                        "condition_on_previous_text": True
+                    }
+                elif quality == "Regular":
+                    return {
+                        "temperature": 0.2,
+                        "compression_ratio_threshold": 2.2,
+                        "logprob_threshold": -0.90,
+                        "no_speech_threshold": 0.5,
+                        "condition_on_previous_text": True
+                    }
+                else:  # Mala
+                    return {
+                        "temperature": 0.3,
+                        "compression_ratio_threshold": 2.1,
+                        "logprob_threshold": -0.85,
+                        "no_speech_threshold": 0.45,
+                        "condition_on_previous_text": True
+                    }
+        return {  # Default to "Muy bueno" if nothing is selected
+            "temperature": 0.0,
+            "compression_ratio_threshold": 2.4,
+            "logprob_threshold": -1.0,
+            "no_speech_threshold": 0.6,
+            "condition_on_previous_text": True
+        }
 
     def update_transcribe_buttons(self):
         selected_items = self.file_list.selectedItems()
@@ -264,8 +317,8 @@ class MainWindow(QMainWindow):
             return
 
         self.output_text.append("Iniciando transcripción...")
-        temperature = self.get_temperature_from_quality()
-        base_output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "transcription_results")
+        transcription_options = self.get_transcription_options()
+        base_output_dir = os.path.join(self.base_dir, "transcription_results")
 
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(True)
@@ -274,11 +327,12 @@ class MainWindow(QMainWindow):
         self.elapsed_timer.start(1000)
         
         cpu_limit = "75%" if self.cpu_mode_75.isChecked() else "100%"
-        
+
         self.transcription_thread = TranscriptionThread(
             self.pipe, files_to_transcribe, self.folder_input.text(), 
-            self.current_language, self.translate_to_english, temperature, 
-            self.auto_detect_btn.isChecked(), base_output_dir, cpu_limit
+            self.current_language, self.translate_to_english, 
+            transcription_options, self.auto_detect_btn.isChecked(), 
+            base_output_dir, cpu_limit
         )
         self.transcription_thread.transcription_done.connect(self.on_transcription_done)
         self.transcription_thread.all_transcriptions_done.connect(self.on_all_transcriptions_done)

@@ -2,6 +2,8 @@
 
 Whisper Transcription GUI is a powerful and user-friendly application that leverages the OpenAI Whisper model to transcribe audio files. Built with Python and PyQt6, this tool provides an intuitive interface for batch processing audio files, with support for multiple languages and translation options.
 
+![alt text](image.png)
+
 ## Features
 
 - 🎧 Supports multiple audio formats (.mp3, .wav, .m4a, .flac, .ogg)

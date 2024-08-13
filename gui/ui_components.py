@@ -1,5 +1,5 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QSlider, QProgressBar, QHBoxLayout
+from PyQt6.QtWidgets import QPushButton, QButtonGroup, QFrame, QLabel, QLineEdit, QListWidget, QTextEdit, QSlider, QProgressBar, QHBoxLayout
 
 def setup_ui(window):
     folder_layout = QHBoxLayout()
@@ -16,18 +16,24 @@ def setup_ui(window):
     window.layout.addWidget(window.file_list)
 
     lang_layout = QHBoxLayout()
+    window.lang_group = QButtonGroup(window)
     window.es_btn = QPushButton("Español")
     window.en_btn = QPushButton("Inglés")
     window.auto_btn = QPushButton("Auto-detectar")
-    window.es_btn.setCheckable(True)
-    window.en_btn.setCheckable(True)
-    window.auto_btn.setCheckable(True)
-    window.es_btn.setChecked(False)
-    window.en_btn.setChecked(False)
-    window.auto_btn.setChecked(False)
-    lang_layout.addWidget(window.es_btn)
-    lang_layout.addWidget(window.en_btn)
-    lang_layout.addWidget(window.auto_btn)
+    window.auto_detect_btn = QPushButton("Auto-detectar y traducir")
+    
+    buttons = [window.es_btn, window.en_btn, window.auto_btn, window.auto_detect_btn]
+    for btn in buttons:
+        btn.setCheckable(True)
+        window.lang_group.addButton(btn)
+        lang_layout.addWidget(btn)
+    
+    # Ajustar el tamaño de los botones (20-20-20-40)
+    lang_layout.setStretch(0, 20)
+    lang_layout.setStretch(1, 20)
+    lang_layout.setStretch(2, 20)
+    lang_layout.setStretch(3, 40)
+    
     window.layout.addLayout(lang_layout)
 
     trans_layout = QHBoxLayout()
@@ -35,16 +41,15 @@ def setup_ui(window):
     window.no_translate_btn = QPushButton("No traducir a Inglés")
     window.translate_btn.setCheckable(True)
     window.no_translate_btn.setCheckable(True)
-    window.translate_btn.setChecked(False)
-    window.no_translate_btn.setChecked(False)
     trans_layout.addWidget(window.translate_btn)
     trans_layout.addWidget(window.no_translate_btn)
     window.layout.addLayout(trans_layout)
 
-    window.auto_detect_btn = QPushButton("Auto-detectar y traducir")
-    window.auto_detect_btn.setCheckable(True)
-    window.auto_detect_btn.setChecked(False)
-    window.layout.addWidget(window.auto_detect_btn)
+    # Añadir separador
+    separator = QFrame()
+    separator.setFrameShape(QFrame.Shape.HLine)
+    separator.setFrameShadow(QFrame.Shadow.Sunken)
+    window.layout.addWidget(separator)
 
     # Botones para el modo CPU
     cpu_layout = QHBoxLayout()
@@ -80,18 +85,32 @@ def setup_ui(window):
 
 def setup_connections(window):
     window.browse_btn.clicked.connect(window.browse_folder)
-    window.auto_detect_btn.clicked.connect(window.set_auto_detect)
-    window.es_btn.clicked.connect(lambda: window.set_language('es'))
-    window.en_btn.clicked.connect(lambda: window.set_language('en'))
-    window.auto_btn.clicked.connect(lambda: window.set_language(None))
+    
+    # Conectar el grupo de botones de idioma
+    window.lang_group.buttonClicked.connect(window.on_lang_button_clicked)
+    
+    # Mantener las conexiones individuales para compatibilidad
+    window.es_btn.clicked.connect(lambda: window.on_lang_button_clicked(window.es_btn))
+    window.en_btn.clicked.connect(lambda: window.on_lang_button_clicked(window.en_btn))
+    window.auto_btn.clicked.connect(lambda: window.on_lang_button_clicked(window.auto_btn))
+    window.auto_detect_btn.clicked.connect(lambda: window.on_lang_button_clicked(window.auto_detect_btn))
+    
+    # Conexiones para los botones de traducción
     window.translate_btn.clicked.connect(lambda: window.set_translation(True))
     window.no_translate_btn.clicked.connect(lambda: window.set_translation(False))
+    
+    # Conexiones para los botones de transcripción
     window.transcribe_selected_btn.clicked.connect(lambda: window.transcribe(selected=True))
     window.transcribe_all_btn.clicked.connect(lambda: window.transcribe(selected=False))
+    
+    # Conexiones para la lista de archivos
     window.file_list.itemSelectionChanged.connect(window.update_transcribe_buttons)
     window.file_list.itemSelectionChanged.connect(window.update_estimate)
+    
+    # Conexión para el botón de limpiar
     window.clear_btn.clicked.connect(window.clear_output)
     
+    # Conexiones para los botones de modo CPU
     window.cpu_mode_75.clicked.connect(lambda: window.set_cpu_mode("75%"))
     window.cpu_mode_100.clicked.connect(lambda: window.set_cpu_mode("100%"))
 

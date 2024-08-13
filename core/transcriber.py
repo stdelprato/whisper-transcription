@@ -1,7 +1,9 @@
 import os
 import time
 import psutil
-from PyQt6.QtCore import QThread, pyqtSignal
+import torch
+from transformers      import pipeline
+from PyQt6.QtCore      import QThread, pyqtSignal
 from utils.audio_utils import get_audio_duration, format_duration
 
 class TranscriptionThread(QThread):
@@ -9,14 +11,14 @@ class TranscriptionThread(QThread):
     all_transcriptions_done = pyqtSignal()
     progress_update = pyqtSignal(int, int)
 
-    def __init__(self, pipe, files, directory, language, translate, temperature, auto_detect, base_output_dir, cpu_limit):
+    def __init__(self, pipe, files, directory, language, translate, transcription_options, auto_detect, base_output_dir, cpu_limit):
         super().__init__()
         self.pipe = pipe
         self.files = files
         self.directory = directory
         self.language = language
         self.translate = translate
-        self.temperature = temperature
+        self.transcription_options = transcription_options
         self.auto_detect = auto_detect
         self.base_output_dir = base_output_dir
         self.cpu_limit = cpu_limit
@@ -46,20 +48,34 @@ class TranscriptionThread(QThread):
         
         audio_duration = get_audio_duration(corrected_input_path)
         
+        # Determinar la tarea y el idioma
+        task = "translate" if self.auto_detect else ("translate" if self.translate and self.language == 'es' else "transcribe")
+        language = self.language if not self.auto_detect else None
+        
+        # Extraer solo los parámetros que el pipeline puede manejar directamente
         generate_kwargs = {
-            "task": "translate" if self.auto_detect else ("translate" if self.translate and self.language == 'es' else "transcribe"),
-            "language": self.language if not self.auto_detect else None,
-            "temperature": self.temperature,
-            "compression_ratio_threshold": 1.35,
-            "logprob_threshold": -1,
-            "no_speech_threshold": 0.6,
+            "chunk_length_s": 30,
+            "batch_size": 8,
         }
 
         if self.cpu_limit == "75%":
             p = psutil.Process()
             p.cpu_affinity([i for i in range(psutil.cpu_count()) if i % 4 != 3])
 
-        result = self.pipe(corrected_input_path, generate_kwargs=generate_kwargs)
+        # Usar fp16 si está disponible
+        if torch.cuda.is_available():
+            generate_kwargs["fp16"] = True
+
+        # Configurar la tarea y el idioma en el pipeline
+        self.pipe.model.config.forced_decoder_ids = self.pipe.tokenizer.get_decoder_prompt_ids(task=task, language=language)
+
+        # Configurar los parámetros de generación del modelo
+        self.pipe.model.config.temperature = self.transcription_options.get('temperature', 0.0)
+        self.pipe.model.config.compression_ratio_threshold = self.transcription_options.get('compression_ratio_threshold', 2.4)
+        self.pipe.model.config.logprob_threshold = self.transcription_options.get('logprob_threshold', -1.0)
+        self.pipe.model.config.no_speech_threshold = self.transcription_options.get('no_speech_threshold', 0.6)
+
+        result = self.pipe(corrected_input_path, **generate_kwargs)
         
         text = self.format_text(result["text"])
         
