@@ -7,7 +7,6 @@ from gui.ui_components import setup_ui, setup_connections, set_style
 from core.file_loader import LoadFilesThread
 from core.transcriber import TranscriptionThread
 from core.whisper_model import load_whisper_model
-from utils.audio_utils import get_audio_duration
 from utils.time_utils import format_time
 import config
 
@@ -191,7 +190,7 @@ class MainWindow(QMainWindow):
 
     def add_file_to_list(self, file_path, relative_path):
         duration = get_audio_duration(file_path)
-        duration_str = format_time(duration)
+        duration_str = format_duration(duration)
         
         if relative_path == '.':
             item_text = f"({duration_str}) | {os.path.basename(file_path)}"

@@ -1,22 +1,18 @@
-from mutagen import File
-import config
+from pydub import AudioSegment
+import os
+from config import SUPPORTED_AUDIO_FORMATS
 
 def is_audio_file(filename):
-    return filename.lower().endswith(config.SUPPORTED_AUDIO_FORMATS)
+    return filename.lower().endswith(SUPPORTED_AUDIO_FORMATS)
 
 def get_audio_duration(file_path):
-    print(f"Intentando obtener la duración de: {file_path}")
     try:
-        audio = File(file_path)
-        if audio is not None:
-            duration = audio.info.length
-            print(f"Duración obtenida con éxito: {duration} segundos")
-            return duration
-        else:
-            print(f"No se pudo leer el archivo de audio: {file_path}")
+        audio = AudioSegment.from_file(file_path)
+        duration_seconds = len(audio) / 1000.0
+        return duration_seconds
     except Exception as e:
         print(f"Error al obtener la duración de {file_path}: {str(e)}")
-    return 0
+        return 0
 
 def format_duration(seconds):
     minutes, seconds = divmod(int(seconds), 60)
