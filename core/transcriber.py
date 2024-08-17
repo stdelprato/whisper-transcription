@@ -48,34 +48,27 @@ class TranscriptionThread(QThread):
         
         audio_duration = get_audio_duration(corrected_input_path)
         
-        # Determinar la tarea y el idioma
-        task = "translate" if self.auto_detect else ("translate" if self.translate and self.language == 'es' else "transcribe")
-        language = self.language if not self.auto_detect else None
-        
-        # Extraer solo los parámetros que el pipeline puede manejar directamente
+        # Configurar parámetros de generación
         generate_kwargs = {
-            "chunk_length_s": 30,
-            "batch_size": 8,
+            "task": "translate" if self.translate else "transcribe",
+            "language": None if self.auto_detect else self.language,
+            "max_new_tokens": 256,
+            "temperature": self.transcription_options.get('temperature', 0.0),
+            "do_sample": False,
+            "num_beams": 1,
         }
+
+        # Añadir otros parámetros de transcripción si son necesarios
+        generate_kwargs.update({
+            k: v for k, v in self.transcription_options.items()
+            if k in ['compression_ratio_threshold', 'logprob_threshold', 'no_speech_threshold']
+        })
 
         if self.cpu_limit == "75%":
             p = psutil.Process()
             p.cpu_affinity([i for i in range(psutil.cpu_count()) if i % 4 != 3])
 
-        # Usar fp16 si está disponible
-        if torch.cuda.is_available():
-            generate_kwargs["fp16"] = True
-
-        # Configurar la tarea y el idioma en el pipeline
-        self.pipe.model.config.forced_decoder_ids = self.pipe.tokenizer.get_decoder_prompt_ids(task=task, language=language)
-
-        # Configurar los parámetros de generación del modelo
-        self.pipe.model.config.temperature = self.transcription_options.get('temperature', 0.0)
-        self.pipe.model.config.compression_ratio_threshold = self.transcription_options.get('compression_ratio_threshold', 2.4)
-        self.pipe.model.config.logprob_threshold = self.transcription_options.get('logprob_threshold', -1.0)
-        self.pipe.model.config.no_speech_threshold = self.transcription_options.get('no_speech_threshold', 0.6)
-
-        result = self.pipe(corrected_input_path, **generate_kwargs)
+        result = self.pipe(corrected_input_path, generate_kwargs=generate_kwargs)
         
         text = self.format_text(result["text"])
         

@@ -35,7 +35,8 @@ class MainWindow(QMainWindow):
         self.pipe = None
         self.audio_files = []
         self.current_language = None
-        self.translate_to_english = False
+        self.translate = False
+        self.auto_detect = False
         self.load_thread = None
 
         self.transcription_data = self.load_transcription_data()
@@ -65,35 +66,43 @@ class MainWindow(QMainWindow):
         self.elapsed_timer = QTimer(self)
         self.elapsed_timer.timeout.connect(self.update_elapsed_time)
         self.elapsed_seconds = 0
+        
+        for button in self.temp_buttons.buttons():
+            button.clicked.connect(self.update_estimate)
+        
+        self.cpu_mode_75.clicked.connect(self.update_estimate)
+        self.cpu_mode_100.clicked.connect(self.update_estimate)
 
         self.transcription_data = self.load_transcription_data()
 
     def on_lang_button_clicked(self, button):
-        is_auto_detect_and_translate = button == self.auto_detect_btn
-        
-        self.translate_btn.setEnabled(button == self.es_btn)
-        self.no_translate_btn.setEnabled(button == self.es_btn)
-        
-        if is_auto_detect_and_translate:
-            self.current_language = None
-            self.translate_to_english = True
-            self.translate_btn.setChecked(True)
-            self.no_translate_btn.setChecked(False)
+        self.auto_detect = False
+        self.translate = False
+        self.current_language = None
+
+        if button == self.auto_detect_btn:
+            self.auto_detect = True
+            self.translate = True
+            print("Auto-detect and translate selected")
         elif button == self.es_btn:
             self.current_language = 'es'
             # No cambiamos el estado de traducción aquí, se maneja con set_translation
         elif button == self.en_btn:
             self.current_language = 'en'
-            self.translate_to_english = False
-            self.translate_btn.setChecked(False)
-            self.no_translate_btn.setChecked(True)
-        else:  # Auto-detectar
-            self.current_language = None
-            self.translate_to_english = False
-            self.translate_btn.setChecked(False)
-            self.no_translate_btn.setChecked(True)
-        
+        else:  # Auto-detectar (sin traducción)
+            self.auto_detect = True
+            print("Auto-detect (without translation) selected")
+
+        self.translate_btn.setEnabled(button == self.es_btn)
+        self.no_translate_btn.setEnabled(button == self.es_btn)
+
+        if button == self.es_btn:
+            if not self.translate_btn.isChecked() and not self.no_translate_btn.isChecked():
+                self.translate_btn.setChecked(True)
+                self.translate = True
+
         self.update_button_states()
+        print(f"auto_detect: {self.auto_detect}, translate: {self.translate}, language: {self.current_language}")
 
     def estimate_transcription_time(self, audio_duration):
         if self.total_audio_duration == 0:
@@ -219,6 +228,7 @@ class MainWindow(QMainWindow):
         self.update_button_states()
 
     def set_translation(self, translate):
+        self.translate = translate
         self.translate_to_english = translate
         self.translate_btn.setChecked(translate)
         self.no_translate_btn.setChecked(not translate)
@@ -244,7 +254,8 @@ class MainWindow(QMainWindow):
                 quality = button.text()
                 if quality == "Muy bueno":
                     return {
-                        "temperature": 0.0,
+                        "quality": "Muy bueno",
+                        "temperature": 0.000001,
                         "compression_ratio_threshold": 2.4,
                         "logprob_threshold": -1.0,
                         "no_speech_threshold": 0.6,
@@ -252,6 +263,7 @@ class MainWindow(QMainWindow):
                     }
                 elif quality == "Bueno":
                     return {
+                        "quality": "Bueno",
                         "temperature": 0.1,
                         "compression_ratio_threshold": 2.3,
                         "logprob_threshold": -0.95,
@@ -260,6 +272,7 @@ class MainWindow(QMainWindow):
                     }
                 elif quality == "Regular":
                     return {
+                        "quality": "Regular",
                         "temperature": 0.2,
                         "compression_ratio_threshold": 2.2,
                         "logprob_threshold": -0.90,
@@ -268,6 +281,7 @@ class MainWindow(QMainWindow):
                     }
                 else:  # Mala
                     return {
+                        "quality": "Mala",
                         "temperature": 0.3,
                         "compression_ratio_threshold": 2.1,
                         "logprob_threshold": -0.85,
@@ -275,7 +289,8 @@ class MainWindow(QMainWindow):
                         "condition_on_previous_text": True
                     }
         return {  # Default to "Muy bueno" if nothing is selected
-            "temperature": 0.0,
+            "quality": "Muy bueno",
+            "temperature": 0.000001,
             "compression_ratio_threshold": 2.4,
             "logprob_threshold": -1.0,
             "no_speech_threshold": 0.6,
@@ -329,8 +344,8 @@ class MainWindow(QMainWindow):
 
         self.transcription_thread = TranscriptionThread(
             self.pipe, files_to_transcribe, self.folder_input.text(), 
-            self.current_language, self.translate_to_english, 
-            transcription_options, self.auto_detect_btn.isChecked(), 
+            self.current_language, self.translate, 
+            transcription_options, self.auto_detect, 
             base_output_dir, cpu_limit
         )
         self.transcription_thread.transcription_done.connect(self.on_transcription_done)
@@ -343,13 +358,13 @@ class MainWindow(QMainWindow):
 
     def on_transcription_done(self, file_path, transcription_time, audio_duration):
         cpu_mode = "75%" if self.cpu_mode_75.isChecked() else "100%"
-        temperature = self.get_temperature_from_quality()
+        transcription_options = self.get_transcription_options()
         
         self.transcription_data[file_path] = {
             'duration': audio_duration,
             'transcription_time': transcription_time,
             'cpu_mode': cpu_mode,
-            'temperature': temperature
+            'quality': transcription_options['quality']
         }
         self.save_transcription_data()
         self.update_estimate()
@@ -358,7 +373,7 @@ class MainWindow(QMainWindow):
         self.output_text.append(f"Duración del audio: {format_duration(audio_duration)}")
         self.output_text.append(f"Tiempo de transcripción: {format_duration(transcription_time)}")
         self.output_text.append(f"Modo CPU: {cpu_mode}")
-        self.output_text.append(f"Temperatura: {temperature:.6f}")
+        self.output_text.append(f"Calidad: {transcription_options['quality']}")
 
     def load_transcription_data(self):
         try:
@@ -378,26 +393,31 @@ class MainWindow(QMainWindow):
             return
         
         current_cpu_mode = "75%" if self.cpu_mode_75.isChecked() else "100%"
-        current_temperature = self.get_temperature_from_quality()
+        current_quality = self.get_transcription_options()['quality']
         
         matching_transcriptions = [
             data for data in self.transcription_data.values()
-            if data['cpu_mode'] == current_cpu_mode and abs(data['temperature'] - current_temperature) < 0.01
+            if data['cpu_mode'] == current_cpu_mode and data['quality'] == current_quality
         ]
-        
-        if len(matching_transcriptions) < 5:
-            self.estimate_label.setText("Tiempo estimado: N/A (Datos insuficientes)")
-            return
         
         total_duration = sum(float(item.text().split('(')[1].split(')')[0].split(':')[0]) * 3600 +
                             float(item.text().split('(')[1].split(')')[0].split(':')[1]) * 60 +
                             float(item.text().split('(')[1].split(')')[0].split(':')[2])
                             for item in selected_items)
         
-        avg_speed = sum(data['transcription_time'] / data['duration'] for data in matching_transcriptions) / len(matching_transcriptions)
-        estimated_time = total_duration * avg_speed
-        
-        self.estimate_label.setText(f"Tiempo estimado: {format_duration(estimated_time)}")
+        if len(matching_transcriptions) < 3:
+            # Si no hay suficientes datos, usa un promedio general
+            all_transcriptions = list(self.transcription_data.values())
+            if all_transcriptions:
+                avg_speed = sum(data['transcription_time'] / data['duration'] for data in all_transcriptions) / len(all_transcriptions)
+            else:
+                avg_speed = 1  # Fallback si no hay datos en absoluto
+            estimated_time = total_duration * avg_speed
+            self.estimate_label.setText(f"Tiempo estimado: {format_duration(estimated_time)} (Estimación general)")
+        else:
+            avg_speed = sum(data['transcription_time'] / data['duration'] for data in matching_transcriptions) / len(matching_transcriptions)
+            estimated_time = total_duration * avg_speed
+            self.estimate_label.setText(f"Tiempo estimado: {format_duration(estimated_time)} ({current_quality}, {current_cpu_mode})")
 
     def on_all_transcriptions_done(self):
         self.output_text.append("COMPLETADO.")
