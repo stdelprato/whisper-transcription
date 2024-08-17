@@ -1,20 +1,20 @@
 # Whisper Transcription GUI
 
-Whisper Transcription GUI is a powerful and user-friendly application that leverages the OpenAI Whisper model to transcribe audio files. Built with Python and PyQt6, this tool provides an intuitive interface for batch processing audio files, with support for multiple languages and translation options.
+Whisper Trasncription GUI es una aplicación fácil de usar que aprovecha el modelo Whisper de OpenAI para transcribir archivos de audio de manera local. Desarrollada con Python y PyQt6, esta herramienta ofrece una interfaz intuitiva para procesar archivos de audio por lotes, con soporte para múltiples idiomas y opciones de traducción.
 
 ![alt text](./images/image.png)
 
-## Features
+## Características
 
-- 🎧 Supports multiple audio formats (.mp3, .wav, .m4a, .flac, .ogg)
-- 🌐 Auto-detection of language and translation to English
-- 🔢 Batch processing of audio files
-- 🎚️ Adjustable temperature settings for transcription accuracy
-- 💻 CPU usage optimization options
-- 📊 Progress tracking and time estimation
-- 📁 Organized output structure mirroring input folders
+- 🎧 Soporta múltiples formatos de audio (.mp3, .wav, .m4a, .flac, .ogg)
+- 🌐 Detección automática de idioma y traducción al inglés
+- 🔢 Procesamiento por lotes de archivos de audio
+- 🎚️ Configuración ajustable de temperatura para precisión en la transcripción
+- 💻 Opciones de optimización de uso de CPU
+- 📊 Seguimiento del progreso y estimación de tiempo
+- 📁 Estructura de salida organizada reflejando las carpetas de entrada
 
-## Requirements
+## Requisitos
 
 - Python 3.8+
 - PyQt6
@@ -23,46 +23,46 @@ Whisper Transcription GUI is a powerful and user-friendly application that lever
 - mutagen
 - psutil
 
-## Installation
+## Instalación
 
-1. Clone the repository
+1. Cloná el repositorio
    ```
    $ git clone https://github.com/stdelprato/whisper-transcription.git
    $ cd whisper-transcription-gui
    ```
 
-2. Create and activate a virtual environment (optional but recommended)
+2. Creá y activá un entorno virtual (opcional pero recomendado)
    ```
    $ python -m venv venv
-   $ source venv/bin/activate  # On Windows, use ``` venv\Scripts\activate ```
+   $ source venv/bin/activate  # En Windows, usá ``` venv\Scripts\activate ```
    ```
 
-3. Install the required packages
+3. Instalá los paquetes requeridos
    ```
    $ pip install -r requirements.txt
    ```
 
-## Usage
+## Uso
 
-1. Run the application
+1. Ejecutá la aplicación
    ```
    $ python main.py
    ```
 
-2. The GUI will now open. Follow these steps:
-   - Click "Explorar" to select a folder with audio files
-   - Choose language settings
-   - Adjust temperature if needed
-   - Click "Transcribir todos" or select specific files
-   - Wait for transcription to complete
-   - Find output in the "results" folder
+2. La interfaz gráfica se abrirá ahora. Seguí estos pasos:
+   - Hacé clic en "Explorar" para seleccionar una carpeta con archivos de audio
+   - Elegí la configuración de idioma
+   - Ajustá la temperatura si es necesario
+   - Hacé clic en "Transcribir todos" o seleccioná archivos específicos
+   - Esperá a que se complete la transcripción
+   - Encontrá la salida en la carpeta "results"
 
-## Contributing
+## Contribuciones
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+¡Las contribuciones son bienvenidas! No dudes en enviar un Pull Request.
 
-## License
+## Licencia
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+Este proyecto está licenciado bajo la Licencia MIT - mirá el archivo LICENSE para más detalles.
 
-Built with ❤️ using OpenAI's Whisper model and PyQt6
+Hecho con ❤️ usando el modelo Whisper de OpenAI y PyQt6
