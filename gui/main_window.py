@@ -396,10 +396,7 @@ class MainWindow(QMainWindow):
         self.update_estimate()
         
         self.output_text.append(f"Transcripción completada: {file_path}")
-        self.output_text.append(f"Duración del audio: {format_duration(audio_duration)}")
         self.output_text.append(f"Tiempo de transcripción: {format_duration(transcription_time)}")
-        self.output_text.append(f"Modo CPU: {cpu_mode}")
-        self.output_text.append(f"Calidad: {transcription_options['quality']}")
 
     def load_transcription_data(self):
         try:
