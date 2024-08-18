@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from utils.audio_utils import get_audio_duration, format_duration
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QMainWindow, QButtonGroup, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
@@ -162,11 +163,30 @@ class MainWindow(QMainWindow):
     def update_elapsed_time(self):
         self.elapsed_seconds += 1
         self.elapsed_time_label.setText(f"Tiempo transcurrido: {format_duration(self.elapsed_seconds)}")
+        self.update_progress()  # Llamamos a update_progress aquí para actualizar la barra de progreso
 
-    def update_progress(self, current, total):
-        percentage = (current / total) * 100
-        self.progress_bar.setValue(int(percentage))
-        self.progress_bar.setFormat(f"{percentage:.2f}% ({current}/{total} archivos)")
+    def update_progress(self):
+        if not hasattr(self, 'transcription_start_time'):
+            return
+
+        elapsed_time = time.time() - self.transcription_start_time
+        estimated_time_text = self.estimate_label.text()
+        
+        if "N/A" not in estimated_time_text:
+            estimated_time = self.parse_estimated_time(estimated_time_text)
+            if estimated_time > 0:
+                percentage = min(100, (elapsed_time / estimated_time) * 100)
+                self.progress_bar.setValue(int(percentage))
+                self.progress_bar.setFormat(f"{percentage:.2f}%")
+            else:
+                self.progress_bar.setFormat("Progreso: N/A")
+        else:
+            self.progress_bar.setFormat("Progreso: N/A")
+
+    def parse_estimated_time(self, time_text):
+        time_parts = time_text.split(": ")[1].split(" ")[0].split(":")
+        hours, minutes, seconds = map(int, time_parts)
+        return hours * 3600 + minutes * 60 + seconds
 
     def browse_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Seleccionar carpeta de audio")
@@ -351,6 +371,12 @@ class MainWindow(QMainWindow):
         self.transcription_thread.transcription_done.connect(self.on_transcription_done)
         self.transcription_thread.all_transcriptions_done.connect(self.on_all_transcriptions_done)
         self.transcription_thread.progress_update.connect(self.update_progress)
+
+        self.transcription_start_time = time.time()
+        self.progress_timer = QTimer(self)
+        self.progress_timer.timeout.connect(self.update_progress)
+        self.progress_timer.start(1000)  # Actualizar cada segundo
+
         self.transcription_thread.start()
 
     def load_whisper_model(self):
@@ -417,12 +443,14 @@ class MainWindow(QMainWindow):
         else:
             avg_speed = sum(data['transcription_time'] / data['duration'] for data in matching_transcriptions) / len(matching_transcriptions)
             estimated_time = total_duration * avg_speed
-            self.estimate_label.setText(f"Tiempo estimado: {format_duration(estimated_time)} ({current_quality}, {current_cpu_mode})")
+            self.estimate_label.setText(f"Tiempo estimado: {format_duration(estimated_time)}")
 
     def on_all_transcriptions_done(self):
         self.output_text.append("COMPLETADO.")
         self.progress_bar.setVisible(False)
         self.elapsed_timer.stop()
+        if hasattr(self, 'progress_timer'):
+            self.progress_timer.stop()
 
     def clear_output(self):
         self.output_text.clear()
