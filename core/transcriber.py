@@ -2,6 +2,8 @@ import os
 import time
 import psutil
 import torch
+import librosa
+import numpy as np
 from transformers      import pipeline
 from PyQt6.QtCore      import QThread, pyqtSignal
 from utils.audio_utils import get_audio_duration, format_duration
@@ -22,10 +24,13 @@ class TranscriptionThread(QThread):
         self.auto_detect = auto_detect
         self.base_output_dir = base_output_dir
         self.cpu_limit = cpu_limit
+        self._is_cancelled = False
 
     def run(self):
         total_files = len(self.files)
         for index, audio_file in enumerate(self.files, 1):
+            if self._is_cancelled:
+                break
             if ' > ' in audio_file:
                 subfolder, filename = audio_file.split(' > ')
                 input_path = os.path.join(self.directory, subfolder, filename)
@@ -36,7 +41,9 @@ class TranscriptionThread(QThread):
             
             self.transcribe_audio(input_path, output_path)
             self.progress_update.emit(index, total_files)
-        self.all_transcriptions_done.emit()
+        
+        if not self._is_cancelled:
+            self.all_transcriptions_done.emit()
 
     def transcribe_audio(self, input_path, output_path):
         start_time = time.time()
@@ -56,13 +63,8 @@ class TranscriptionThread(QThread):
             "temperature": self.transcription_options.get('temperature', 0.0),
             "do_sample": False,
             "num_beams": 1,
+            "return_timestamps": True
         }
-
-        # Añadir otros parámetros de transcripción si son necesarios
-        generate_kwargs.update({
-            k: v for k, v in self.transcription_options.items()
-            if k in ['compression_ratio_threshold', 'logprob_threshold', 'no_speech_threshold']
-        })
 
         if self.cpu_limit == "75%":
             p = psutil.Process()
@@ -75,7 +77,16 @@ class TranscriptionThread(QThread):
         output_dir = os.path.dirname(output_path)
         os.makedirs(output_dir, exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(text)
+            f.write(text + "\n\n")  # Escribir el texto formateado
+            f.write("Transcripción con timestamps:\n")
+            if "chunks" in result:
+                for chunk in result["chunks"]:
+                    start = chunk['timestamp'][0]
+                    end = chunk['timestamp'][1]
+                    chunk_text = chunk['text']
+                    f.write(f"[{start:.2f}s -> {end:.2f}s] {chunk_text}\n")
+            else:
+                f.write(f"[0.00s -> {audio_duration:.2f}s] {result['text']}\n")
         
         end_time = time.time()
         transcription_time = end_time - start_time
@@ -93,3 +104,8 @@ class TranscriptionThread(QThread):
             paragraphs.append(paragraph)
         formatted_text = '\n\n'.join(paragraphs)
         return formatted_text
+
+    def cancel(self):
+        self._is_cancelled = True
+        if hasattr(self.pipe, 'model'):
+            self.pipe.model.generation_config.max_new_tokens = 0
