@@ -25,6 +25,8 @@ class TranscriptionThread(QThread):
     def run(self):
         total_files = len(self.files)
         for index, audio_file in enumerate(self.files, 1):
+            if self._is_cancelled:
+                break
             if ' > ' in audio_file:
                 subfolder, filename = audio_file.split(' > ')
                 input_path = os.path.join(self.directory, subfolder, filename)
@@ -35,7 +37,10 @@ class TranscriptionThread(QThread):
             
             self.transcribe_audio(input_path, output_path)
             self.progress_update.emit(index, total_files)
-        self.all_transcriptions_done.emit()
+        
+        if not self._is_cancelled:
+            self.all_transcriptions_done.emit()
+
 
     def transcribe_audio(self, input_path, output_path):
         start_time = time.time()

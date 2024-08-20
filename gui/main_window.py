@@ -316,7 +316,7 @@ class MainWindow(QMainWindow):
             "no_speech_threshold": 0.6,
             "condition_on_previous_text": True
         }
-
+    
     def update_transcribe_buttons(self):
         selected_items = self.file_list.selectedItems()
         self.transcribe_selected_btn.setVisible(len(selected_items) > 0)
