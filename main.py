@@ -1,3 +1,6 @@
+import os
+os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
+
 import sys
 from PyQt6.QtWidgets import QApplication
 from gui.main_window import MainWindow

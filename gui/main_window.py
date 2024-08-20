@@ -33,7 +33,7 @@ class MainWindow(QMainWindow):
         self.total_transcription_time = 0
         self.total_audio_duration = 0
 
-        self.pipe = None
+        self.pipe = load_whisper_model()
         self.audio_files = []
         self.current_language = None
         self.translate = False
@@ -276,8 +276,8 @@ class MainWindow(QMainWindow):
                     return {
                         "quality": "Muy bueno",
                         "temperature": 0.000001,
-                        "compression_ratio_threshold": 2.4,
-                        "logprob_threshold": -1.0,
+                        "compression_ratio_threshold": 2.8,
+                        "logprob_threshold": -1.5,
                         "no_speech_threshold": 0.6,
                         "condition_on_previous_text": True
                     }
@@ -285,8 +285,8 @@ class MainWindow(QMainWindow):
                     return {
                         "quality": "Bueno",
                         "temperature": 0.1,
-                        "compression_ratio_threshold": 2.3,
-                        "logprob_threshold": -0.95,
+                        "compression_ratio_threshold": 2.8,
+                        "logprob_threshold": -1.6,
                         "no_speech_threshold": 0.55,
                         "condition_on_previous_text": True
                     }
@@ -294,8 +294,8 @@ class MainWindow(QMainWindow):
                     return {
                         "quality": "Regular",
                         "temperature": 0.2,
-                        "compression_ratio_threshold": 2.2,
-                        "logprob_threshold": -0.90,
+                        "compression_ratio_threshold": 2.8,
+                        "logprob_threshold": -1.7,
                         "no_speech_threshold": 0.5,
                         "condition_on_previous_text": True
                     }
@@ -303,16 +303,16 @@ class MainWindow(QMainWindow):
                     return {
                         "quality": "Mala",
                         "temperature": 0.3,
-                        "compression_ratio_threshold": 2.1,
-                        "logprob_threshold": -0.85,
+                        "compression_ratio_threshold": 2.8,
+                        "logprob_threshold": -1.8,
                         "no_speech_threshold": 0.45,
                         "condition_on_previous_text": True
                     }
         return {  # Default to "Muy bueno" if nothing is selected
             "quality": "Muy bueno",
             "temperature": 0.000001,
-            "compression_ratio_threshold": 2.4,
-            "logprob_threshold": -1.0,
+            "compression_ratio_threshold": 2.8,
+            "logprob_threshold": -1.5,
             "no_speech_threshold": 0.6,
             "condition_on_previous_text": True
         }
