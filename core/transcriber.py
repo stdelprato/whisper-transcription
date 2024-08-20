@@ -1,11 +1,7 @@
 import os
 import time
-import psutil
 import torch
-import librosa
-import numpy as np
-from transformers      import pipeline
-from PyQt6.QtCore      import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal
 from utils.audio_utils import get_audio_duration, format_duration
 
 class TranscriptionThread(QThread):
@@ -56,46 +52,42 @@ class TranscriptionThread(QThread):
         
         audio_duration = get_audio_duration(corrected_input_path)
         
-        # Configurar parámetros de generación
-        generate_kwargs = {
-            "task": "translate" if self.translate else "transcribe",
-            "language": self.language if not self.auto_detect else None,
-            "max_new_tokens": 256,
-            "temperature": self.transcription_options.get('temperature', 0.0),
-            "do_sample": False,
-            "num_beams": 1
-        }
-
-        if self.cpu_limit == "75%":
-            p = psutil.Process()
-            p.cpu_affinity([i for i in range(psutil.cpu_count()) if i % 4 != 3])
-
-        result = self.pipe(corrected_input_path, return_timestamps=True, generate_kwargs=generate_kwargs)
+        # Configurar parámetros de transcripción
+        task = "translate" if self.translate else "transcribe"
+        language = self.language if not self.auto_detect else None
         
-        text = self.format_text(result["text"])
+        # Llamar al método transcribe de Faster-Whisper
+        segments, info = self.pipe.transcribe(
+            corrected_input_path,
+            task=task,
+            language=language,
+            temperature=self.transcription_options.get('temperature', 0.0),
+            beam_size=5,
+            patience=1.2,
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=500)
+        )
         
-        output_dir = os.path.dirname(output_path)
-        os.makedirs(output_dir, exist_ok=True)
+        text = ""
         with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(text + "\n\n")  # Escribir el texto formateado
             f.write("Transcripción con timestamps:\n")
-            if "chunks" in result:
-                for chunk in result["chunks"]:
-                    start = chunk.get('timestamp', [0, 0])[0]
-                    end = chunk.get('timestamp', [0, 0])[1]
-                    chunk_text = chunk.get('text', '')
-                    f.write(f"[{self.format_timestamp(start)} -> {self.format_timestamp(end)}] {chunk_text}\n")
-            else:
-                import json
-                f.write(json.dumps(result, indent=2))
+            for segment in segments:
+                text += segment.text + " "
+                f.write(f"[{self.format_timestamp(segment.start)} -> {self.format_timestamp(segment.end)}] {segment.text}\n")
+        
+        text = self.format_text(text.strip())
+        
+        with open(output_path, 'r+', encoding='utf-8') as f:
+            content = f.read()
+            f.seek(0, 0)
+            f.write(text + "\n\n" + content)
         
         end_time = time.time()
         transcription_time = end_time - start_time
         self.transcription_done.emit(input_path, transcription_time, audio_duration)
 
     def format_timestamp(self, seconds):
-        minutes, seconds = divmod(seconds, 60)
-        return f"{int(minutes):02d}:{seconds:05.2f}" if minutes > 0 else f"{seconds:.2f}s"
+        return format_duration(seconds)
 
     def format_text(self, text):
         import re

@@ -33,7 +33,7 @@ class MainWindow(QMainWindow):
         self.total_transcription_time = 0
         self.total_audio_duration = 0
 
-        self.pipe = None
+        self.pipe = load_whisper_model()
         self.audio_files = []
         self.current_language = None
         self.translate = False
@@ -275,41 +275,46 @@ class MainWindow(QMainWindow):
                 if quality == "Muy bueno":
                     return {
                         "quality": "Muy bueno",
-                        "temperature": 0.0,
-                        "compression_ratio_threshold": 2.8,  # Increased from 2.4 to 2.8
-                        "logprob_threshold": -1.25,
-                        "no_speech_threshold": 0.4,
+                        "temperature": 0.000001,
+                        "compression_ratio_threshold": 2.8,
+                        "logprob_threshold": -1.5,
+                        "no_speech_threshold": 0.6,
+                        "condition_on_previous_text": True
                     }
                 elif quality == "Bueno":
                     return {
                         "quality": "Bueno",
                         "temperature": 0.1,
-                        "compression_ratio_threshold": 2.7,  # Adjusted accordingly
-                        "logprob_threshold": -1.25,
-                        "no_speech_threshold": 0.4,
+                        "compression_ratio_threshold": 2.8,
+                        "logprob_threshold": -1.6,
+                        "no_speech_threshold": 0.55,
+                        "condition_on_previous_text": True
                     }
                 elif quality == "Regular":
                     return {
                         "quality": "Regular",
                         "temperature": 0.2,
-                        "compression_ratio_threshold": 2.6,  # Adjusted accordingly
-                        "logprob_threshold": -1.25,
-                        "no_speech_threshold": 0.4,
+                        "compression_ratio_threshold": 2.8,
+                        "logprob_threshold": -1.7,
+                        "no_speech_threshold": 0.5,
+                        "condition_on_previous_text": True
                     }
                 else:  # Mala
                     return {
                         "quality": "Mala",
                         "temperature": 0.3,
-                        "compression_ratio_threshold": 2.5,  # Adjusted accordingly
-                        "logprob_threshold": -1.25,
-                        "no_speech_threshold": 0.4,
+                        "compression_ratio_threshold": 2.8,
+                        "logprob_threshold": -1.8,
+                        "no_speech_threshold": 0.45,
+                        "condition_on_previous_text": True
                     }
         return {  # Default to "Muy bueno" if nothing is selected
             "quality": "Muy bueno",
-            "temperature": 0.0,
+            "temperature": 0.000001,
             "compression_ratio_threshold": 2.8,
-            "logprob_threshold": -1.25,
-            "no_speech_threshold": 0.4,
+            "logprob_threshold": -1.5,
+            "no_speech_threshold": 0.6,
+            "condition_on_previous_text": True
         }
     
     def update_transcribe_buttons(self):
