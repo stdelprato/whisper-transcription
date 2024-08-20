@@ -278,8 +278,7 @@ class MainWindow(QMainWindow):
                         "temperature": 0.0,
                         "compression_ratio_threshold": 2.8,  # Increased from 2.4 to 2.8
                         "logprob_threshold": -1.25,
-                        "no_speech_threshold": 0.1,
-                        "condition_on_previous_text": True
+                        "no_speech_threshold": 0.4,
                     }
                 elif quality == "Bueno":
                     return {
@@ -287,8 +286,7 @@ class MainWindow(QMainWindow):
                         "temperature": 0.1,
                         "compression_ratio_threshold": 2.7,  # Adjusted accordingly
                         "logprob_threshold": -1.25,
-                        "no_speech_threshold": 0.1,
-                        "condition_on_previous_text": True
+                        "no_speech_threshold": 0.4,
                     }
                 elif quality == "Regular":
                     return {
@@ -296,8 +294,7 @@ class MainWindow(QMainWindow):
                         "temperature": 0.2,
                         "compression_ratio_threshold": 2.6,  # Adjusted accordingly
                         "logprob_threshold": -1.25,
-                        "no_speech_threshold": 0.1,
-                        "condition_on_previous_text": True
+                        "no_speech_threshold": 0.4,
                     }
                 else:  # Mala
                     return {
@@ -305,16 +302,14 @@ class MainWindow(QMainWindow):
                         "temperature": 0.3,
                         "compression_ratio_threshold": 2.5,  # Adjusted accordingly
                         "logprob_threshold": -1.25,
-                        "no_speech_threshold": 0.1,
-                        "condition_on_previous_text": True
+                        "no_speech_threshold": 0.4,
                     }
         return {  # Default to "Muy bueno" if nothing is selected
             "quality": "Muy bueno",
             "temperature": 0.0,
             "compression_ratio_threshold": 2.8,
             "logprob_threshold": -1.25,
-            "no_speech_threshold": 0.1,
-            "condition_on_previous_text": True
+            "no_speech_threshold": 0.4,
         }
     
     def update_transcribe_buttons(self):

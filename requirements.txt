@@ -3,3 +3,4 @@ psutil
 torch==2.0.1
 transformers
 mutagen==1.46.0
+librosa
