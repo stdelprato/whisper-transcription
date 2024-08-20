@@ -45,6 +45,7 @@ class TranscriptionThread(QThread):
         if not self._is_cancelled:
             self.all_transcriptions_done.emit()
 
+
     def transcribe_audio(self, input_path, output_path):
         start_time = time.time()
         
@@ -58,19 +59,18 @@ class TranscriptionThread(QThread):
         # Configurar parámetros de generación
         generate_kwargs = {
             "task": "translate" if self.translate else "transcribe",
-            "language": None if self.auto_detect else self.language,
+            "language": self.language if not self.auto_detect else None,
             "max_new_tokens": 256,
             "temperature": self.transcription_options.get('temperature', 0.0),
             "do_sample": False,
-            "num_beams": 1,
-            "return_timestamps": True
+            "num_beams": 1
         }
 
         if self.cpu_limit == "75%":
             p = psutil.Process()
             p.cpu_affinity([i for i in range(psutil.cpu_count()) if i % 4 != 3])
 
-        result = self.pipe(corrected_input_path, generate_kwargs=generate_kwargs)
+        result = self.pipe(corrected_input_path, return_timestamps=True, generate_kwargs=generate_kwargs)
         
         text = self.format_text(result["text"])
         
@@ -81,16 +81,21 @@ class TranscriptionThread(QThread):
             f.write("Transcripción con timestamps:\n")
             if "chunks" in result:
                 for chunk in result["chunks"]:
-                    start = chunk['timestamp'][0]
-                    end = chunk['timestamp'][1]
-                    chunk_text = chunk['text']
-                    f.write(f"[{start:.2f}s -> {end:.2f}s] {chunk_text}\n")
+                    start = chunk.get('timestamp', [0, 0])[0]
+                    end = chunk.get('timestamp', [0, 0])[1]
+                    chunk_text = chunk.get('text', '')
+                    f.write(f"[{self.format_timestamp(start)} -> {self.format_timestamp(end)}] {chunk_text}\n")
             else:
-                f.write(f"[0.00s -> {audio_duration:.2f}s] {result['text']}\n")
+                import json
+                f.write(json.dumps(result, indent=2))
         
         end_time = time.time()
         transcription_time = end_time - start_time
         self.transcription_done.emit(input_path, transcription_time, audio_duration)
+
+    def format_timestamp(self, seconds):
+        minutes, seconds = divmod(seconds, 60)
+        return f"{int(minutes):02d}:{seconds:05.2f}" if minutes > 0 else f"{seconds:.2f}s"
 
     def format_text(self, text):
         import re
