@@ -276,7 +276,7 @@ class MainWindow(QMainWindow):
                     return {
                         "quality": "Muy bueno",
                         "temperature": 0.000001,
-                        "compression_ratio_threshold": 2.8,
+                        "compression_ratio_threshold": 1.8,
                         "logprob_threshold": -1.5,
                         "no_speech_threshold": 0.6,
                         "condition_on_previous_text": True
@@ -285,7 +285,7 @@ class MainWindow(QMainWindow):
                     return {
                         "quality": "Bueno",
                         "temperature": 0.1,
-                        "compression_ratio_threshold": 2.8,
+                        "compression_ratio_threshold": 1.8,
                         "logprob_threshold": -1.6,
                         "no_speech_threshold": 0.55,
                         "condition_on_previous_text": True
@@ -294,7 +294,7 @@ class MainWindow(QMainWindow):
                     return {
                         "quality": "Regular",
                         "temperature": 0.2,
-                        "compression_ratio_threshold": 2.8,
+                        "compression_ratio_threshold": 1.8,
                         "logprob_threshold": -1.7,
                         "no_speech_threshold": 0.5,
                         "condition_on_previous_text": True
@@ -303,7 +303,7 @@ class MainWindow(QMainWindow):
                     return {
                         "quality": "Mala",
                         "temperature": 0.3,
-                        "compression_ratio_threshold": 2.8,
+                        "compression_ratio_threshold": 1.8,
                         "logprob_threshold": -1.8,
                         "no_speech_threshold": 0.45,
                         "condition_on_previous_text": True
@@ -311,7 +311,7 @@ class MainWindow(QMainWindow):
         return {  # Default to "Muy bueno" if nothing is selected
             "quality": "Muy bueno",
             "temperature": 0.000001,
-            "compression_ratio_threshold": 2.8,
+            "compression_ratio_threshold": 1.8,
             "logprob_threshold": -1.5,
             "no_speech_threshold": 0.6,
             "condition_on_previous_text": True
