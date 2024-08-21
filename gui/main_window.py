@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QMainWindow, QButtonGroup, QComboBox, QApplication, 
 from gui.ui_components import setup_ui, setup_connections, set_style
 from core.file_loader import LoadFilesThread
 from core.transcriber import TranscriptionThread
-from core.whisper_model import load_whisper_model
+from core.whisper_model import load_whisper_model, load_faster_whisper_model, load_original_whisper_model
 from utils.time_utils import format_time
 import config
 
@@ -15,13 +15,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        # Definir la ruta base (2 niveles arriba de main_window.py)
         self.base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        
-        # Definir la ruta para transcription_data.json (1 nivel arriba de main_window.py, mismo nivel que main.py)
         self.json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'transcription_data.json')
-        
-        print(f"JSON path: {self.json_path}")  # Debug print
         
         self.setWindowTitle(config.APP_TITLE)
         self.setGeometry(100, 100, 800, 600)
@@ -41,6 +36,7 @@ class MainWindow(QMainWindow):
         self.load_thread = None
 
         self.transcription_data = self.load_transcription_data()
+        self.selected_model = "faster-whisper"
 
         setup_ui(self)
         self.setup_temperature_selection()
@@ -53,15 +49,11 @@ class MainWindow(QMainWindow):
         set_style(self)
         
         time_layout = QHBoxLayout()
-        
         self.estimate_label = QLabel("Tiempo estimado: N/A")
         time_layout.addWidget(self.estimate_label)
-        
-        time_layout.addStretch()  # Esto empujará el label de tiempo transcurrido hacia la derecha
-        
+        time_layout.addStretch()
         self.elapsed_time_label = QLabel("Tiempo transcurrido: 00:00")
         time_layout.addWidget(self.elapsed_time_label)
-        
         self.layout.addLayout(time_layout)
         
         self.elapsed_timer = QTimer(self)
@@ -71,8 +63,9 @@ class MainWindow(QMainWindow):
         for button in self.temp_buttons.buttons():
             button.clicked.connect(self.update_estimate)
         
-        self.cpu_mode_75.clicked.connect(self.update_estimate)
-        self.cpu_mode_100.clicked.connect(self.update_estimate)
+        # Conectar los botones de selección de modelo
+        self.faster_whisper_btn.clicked.connect(lambda: self.set_model("faster-whisper"))
+        self.original_whisper_btn.clicked.connect(lambda: self.set_model("original-whisper"))
 
         self.transcription_data = self.load_transcription_data()
 
@@ -152,13 +145,10 @@ class MainWindow(QMainWindow):
             if btn != button:
                 btn.setChecked(False)
 
-    def set_cpu_mode(self, mode):
-        if mode == "75%":
-            self.cpu_mode_75.setChecked(True)
-            self.cpu_mode_100.setChecked(False)
-        else:
-            self.cpu_mode_75.setChecked(False)
-            self.cpu_mode_100.setChecked(True)
+    def set_model(self, model):
+        self.selected_model = model
+        self.pipe = None  # Reseteamos el pipe para que se cargue el nuevo modelo cuando sea necesario
+        print(f"Modelo seleccionado: {model}")
 
     def update_elapsed_time(self):
         self.elapsed_seconds += 1
@@ -336,7 +326,7 @@ class MainWindow(QMainWindow):
             return
 
         if not self.pipe:
-            self.output_text.append("Cargando modelo Whisper large-v3...")
+            self.output_text.append(f"Cargando modelo {self.selected_model}...")
             self.load_whisper_model()
 
         files_to_transcribe = [item.text().split(' | ', 1)[1] for item in self.file_list.selectedItems()] if selected else [self.file_list.item(i).text().split(' | ', 1)[1] for i in range(self.file_list.count())]
@@ -354,14 +344,12 @@ class MainWindow(QMainWindow):
         
         self.elapsed_seconds = 0
         self.elapsed_timer.start(1000)
-        
-        cpu_limit = "75%" if self.cpu_mode_75.isChecked() else "100%"
 
         self.transcription_thread = TranscriptionThread(
             self.pipe, files_to_transcribe, self.folder_input.text(), 
             self.current_language, self.translate, 
             transcription_options, self.auto_detect, 
-            base_output_dir, cpu_limit
+            base_output_dir, self.selected_model
         )
         self.transcription_thread.transcription_done.connect(self.on_transcription_done)
         self.transcription_thread.all_transcriptions_done.connect(self.on_all_transcriptions_done)
@@ -370,21 +358,22 @@ class MainWindow(QMainWindow):
         self.transcription_start_time = time.time()
         self.progress_timer = QTimer(self)
         self.progress_timer.timeout.connect(self.update_progress)
-        self.progress_timer.start(1000)  # Actualizar cada segundo
+        self.progress_timer.start(1000)
 
         self.transcription_thread.start()
 
     def load_whisper_model(self):
-        self.pipe = load_whisper_model()
+        if self.selected_model == "faster-whisper":
+            self.pipe = load_faster_whisper_model()
+        else:
+            self.pipe = load_original_whisper_model()
 
     def on_transcription_done(self, file_path, transcription_time, audio_duration):
-        cpu_mode = "75%" if self.cpu_mode_75.isChecked() else "100%"
         transcription_options = self.get_transcription_options()
         
         self.transcription_data[file_path] = {
             'duration': audio_duration,
             'transcription_time': transcription_time,
-            'cpu_mode': cpu_mode,
             'quality': transcription_options['quality']
         }
         self.save_transcription_data()
@@ -410,12 +399,11 @@ class MainWindow(QMainWindow):
             self.estimate_label.setText("Tiempo estimado: N/A")
             return
         
-        current_cpu_mode = "75%" if self.cpu_mode_75.isChecked() else "100%"
         current_quality = self.get_transcription_options()['quality']
         
         matching_transcriptions = [
             data for data in self.transcription_data.values()
-            if data['cpu_mode'] == current_cpu_mode and data['quality'] == current_quality
+            if data['quality'] == current_quality
         ]
         
         total_duration = sum(float(item.text().split('(')[1].split(')')[0].split(':')[0]) * 3600 +

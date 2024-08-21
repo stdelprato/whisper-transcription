@@ -15,6 +15,7 @@ def setup_ui(window):
     window.file_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
     window.layout.addWidget(window.file_list)
 
+    # Botones de idioma
     lang_layout = QHBoxLayout()
     window.lang_group = QButtonGroup(window)
     window.es_btn = QPushButton("Español")
@@ -28,14 +29,9 @@ def setup_ui(window):
         window.lang_group.addButton(btn)
         lang_layout.addWidget(btn)
     
-    # Ajustar el tamaño de los botones (20-20-20-40)
-    lang_layout.setStretch(0, 20)
-    lang_layout.setStretch(1, 20)
-    lang_layout.setStretch(2, 20)
-    lang_layout.setStretch(3, 40)
-    
     window.layout.addLayout(lang_layout)
 
+    # Botones de traducción
     trans_layout = QHBoxLayout()
     window.translate_btn = QPushButton("Traducir a Inglés")
     window.no_translate_btn = QPushButton("No traducir a Inglés")
@@ -45,25 +41,27 @@ def setup_ui(window):
     trans_layout.addWidget(window.no_translate_btn)
     window.layout.addLayout(trans_layout)
 
-    # Añadir separador
+    # Agregar separador
     separator = QFrame()
     separator.setFrameShape(QFrame.Shape.HLine)
     separator.setFrameShadow(QFrame.Shadow.Sunken)
     window.layout.addWidget(separator)
 
-    # Botones para el modo CPU
-    cpu_layout = QHBoxLayout()
-    window.cpu_mode_75 = QPushButton("Modo Ahorro (75%)")
-    window.cpu_mode_100 = QPushButton("Modo Rendimiento (100%)")
-    window.cpu_mode_75.setCheckable(True)
-    window.cpu_mode_100.setCheckable(True)
-    window.cpu_mode_100.setChecked(True)
-    cpu_layout.addWidget(window.cpu_mode_75)
-    cpu_layout.addWidget(window.cpu_mode_100)
-    window.layout.addLayout(cpu_layout)
+    # Botones de selección de modelo
+    model_layout = QHBoxLayout()
+    window.model_group = QButtonGroup(window)
+    window.faster_whisper_btn = QPushButton("Faster-Whisper")
+    window.original_whisper_btn = QPushButton("Whisper Original")
+    window.faster_whisper_btn.setCheckable(True)
+    window.original_whisper_btn.setCheckable(True)
+    window.faster_whisper_btn.setChecked(True)  # Faster-Whisper por defecto
+    window.model_group.addButton(window.faster_whisper_btn)
+    window.model_group.addButton(window.original_whisper_btn)
+    model_layout.addWidget(window.faster_whisper_btn)
+    model_layout.addWidget(window.original_whisper_btn)
+    window.layout.addLayout(model_layout)
 
-    # La creación de los botones de calidad de audio se hará en main_window.py
-
+    # Botones de transcripción
     window.trans_btn_layout = QHBoxLayout()
     window.transcribe_selected_btn = QPushButton("Transcribir seleccionados")
     window.transcribe_all_btn = QPushButton("Transcribir todos")
@@ -109,10 +107,6 @@ def setup_connections(window):
     
     # Conexión para el botón de limpiar
     window.clear_btn.clicked.connect(window.clear_output)
-    
-    # Conexiones para los botones de modo CPU
-    window.cpu_mode_75.clicked.connect(lambda: window.set_cpu_mode("75%"))
-    window.cpu_mode_100.clicked.connect(lambda: window.set_cpu_mode("100%"))
 
 def set_style(window):
     base_style = """
