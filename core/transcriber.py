@@ -66,6 +66,7 @@ class TranscriptionThread(QThread):
             patience=1.2,
             vad_filter=True,
             vad_parameters=dict(min_silence_duration_ms=500)
+            chunk_length_s=30
         )
         
         text = ""
