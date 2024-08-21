@@ -7,6 +7,8 @@ whisper-transcription-env/
 transcription_results/
 transcription_data.json
 
+repopack*
+
 # Ignore .pyc files
 *.pyc
 
