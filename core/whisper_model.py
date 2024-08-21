@@ -9,6 +9,12 @@ def load_whisper_model():
     model_size = "large-v2"
 
     print(f"Cargando el modelo Faster-Whisper {model_size}...")
-    model = WhisperModel(model_size, device=device, compute_type=compute_type, download_root=config.MODEL_DIR)
+    model = WhisperModel(
+        model_size, 
+        device=device, 
+        compute_type=compute_type, 
+        download_root=config.MODEL_DIR,
+        chunk_length_s=30  # Añadimos el parámetro chunk_length_s aquí
+    )
 
     return model
