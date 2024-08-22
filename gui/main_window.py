@@ -28,7 +28,8 @@ class MainWindow(QMainWindow):
         self.total_transcription_time = 0
         self.total_audio_duration = 0
 
-        self.pipe = load_whisper_model()
+        self.selected_model = "faster-whisper"
+        self.pipe = None  # Inicializamos pipe a None
         self.audio_files = []
         self.current_language = None
         self.translate = False
@@ -36,7 +37,6 @@ class MainWindow(QMainWindow):
         self.load_thread = None
 
         self.transcription_data = self.load_transcription_data()
-        self.selected_model = "faster-whisper"
 
         setup_ui(self)
         self.setup_temperature_selection()
@@ -66,6 +66,10 @@ class MainWindow(QMainWindow):
         # Conectar los botones de selección de modelo
         self.faster_whisper_btn.clicked.connect(lambda: self.set_model("faster-whisper"))
         self.original_whisper_btn.clicked.connect(lambda: self.set_model("original-whisper"))
+
+        # Asegurarse de que el modelo correcto esté seleccionado y cargado por defecto
+        self.faster_whisper_btn.setChecked(True)
+        self.set_model("faster-whisper")
 
         self.transcription_data = self.load_transcription_data()
 

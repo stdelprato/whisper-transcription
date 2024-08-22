@@ -1,6 +1,7 @@
 import os
 import time
 import torch
+from faster_whisper import WhisperModel
 from PyQt6.QtCore import QThread, pyqtSignal
 from utils.audio_utils import get_audio_duration, format_duration
 
@@ -51,7 +52,8 @@ class TranscriptionThread(QThread):
         task = "translate" if self.translate else "transcribe"
         language = self.language if not self.auto_detect else None
         
-        if self.model_type == "faster-whisper":
+        if isinstance(self.pipe, WhisperModel):
+            print("Transcribiendo con Faster-Whisper")
             segments, info = self.pipe.transcribe(
                 corrected_input_path,
                 task=task,
@@ -61,7 +63,7 @@ class TranscriptionThread(QThread):
                 no_speech_threshold=0.2,
                 condition_on_previous_text=True,
                 beam_size=10,
-                patience=2.0,
+                patience=2,
                 length_penalty=1.0,
                 repetition_penalty=1.5,
                 max_initial_timestamp=1.0,
@@ -82,6 +84,7 @@ class TranscriptionThread(QThread):
                 for segment in segments:
                     f.write(f"[{self.format_timestamp(segment.start)} -> {self.format_timestamp(segment.end)}] {segment.text}\n")
         else:
+            print("Transcribiendo con Whisper Original")
             generate_kwargs = {
                 "task": task,
                 "language": language,
