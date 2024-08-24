@@ -50,15 +50,17 @@ def setup_ui(window):
     # Botones de selección de modelo
     model_layout = QHBoxLayout()
     window.model_group = QButtonGroup(window)
+    window.model_group.setExclusive(True)
+    
+    window.faster_whisper_xxl_btn = QPushButton("Faster-Whisper XXL (recomendado)")
     window.faster_whisper_btn = QPushButton("Faster-Whisper")
     window.original_whisper_btn = QPushButton("Whisper Original")
-    window.faster_whisper_btn.setCheckable(True)
-    window.original_whisper_btn.setCheckable(True)
-    window.faster_whisper_btn.setChecked(True)  # Faster-Whisper por defecto
-    window.model_group.addButton(window.faster_whisper_btn)
-    window.model_group.addButton(window.original_whisper_btn)
-    model_layout.addWidget(window.faster_whisper_btn)
-    model_layout.addWidget(window.original_whisper_btn)
+    
+    for btn in [window.faster_whisper_xxl_btn, window.faster_whisper_btn, window.original_whisper_btn]:
+        btn.setCheckable(True)
+        window.model_group.addButton(btn)
+        model_layout.addWidget(btn)
+    
     window.layout.addLayout(model_layout)
 
     # Botones de transcripción
@@ -93,6 +95,11 @@ def setup_connections(window):
     window.auto_btn.clicked.connect(lambda: window.on_lang_button_clicked(window.auto_btn))
     window.auto_detect_btn.clicked.connect(lambda: window.on_lang_button_clicked(window.auto_detect_btn))
     
+    # Conexiones para los botones de modelo
+    window.faster_whisper_xxl_btn.clicked.connect(lambda: window.set_model("faster-whisper-xxl"))
+    window.faster_whisper_btn.clicked.connect(lambda: window.set_model("faster-whisper"))
+    window.original_whisper_btn.clicked.connect(lambda: window.set_model("original-whisper"))
+    
     # Conexiones para los botones de traducción
     window.translate_btn.clicked.connect(lambda: window.set_translation(True))
     window.no_translate_btn.clicked.connect(lambda: window.set_translation(False))
@@ -123,7 +130,10 @@ def set_style(window):
         QWidget { background-color: #2D2D2D; color: #FFFFFF; }
         QPushButton { background-color: #4A4A4A; border: 1px solid #5A5A5A; padding: 5px; }
         QPushButton:hover { background-color: #5A5A5A; }
-        QPushButton:checked { background-color: #3A7CA5; }
+        QPushButton:checked { 
+            background-color: #3A7CA5; 
+            color: white;
+        }
         QLineEdit, QTextEdit, QListWidget { 
             background-color: #3D3D3D; 
             border: 1px solid #5A5A5A; 

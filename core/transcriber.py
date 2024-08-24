@@ -58,25 +58,11 @@ class TranscriptionThread(QThread):
                 corrected_input_path,
                 task=task,
                 language=language,
-                temperature=0.0,
-                compression_ratio_threshold=2.4,
-                no_speech_threshold=0.2,
-                condition_on_previous_text=True,
-                beam_size=10,
-                patience=2,
-                length_penalty=1.0,
-                repetition_penalty=1.5,
-                max_initial_timestamp=1.0,
-                word_timestamps=True,
+                temperature=self.transcription_options.get('temperature', 0.0),
+                beam_size=5,
+                patience=1.2,
                 vad_filter=True,
-                vad_parameters=dict(
-                    min_silence_duration_ms=500,
-                    speech_pad_ms=400,
-                    threshold=0.3
-                ),
-                initial_prompt="Este es un audio con ruido de fondo y puede contener múltiples voces o sonidos. La transcripción debe ser precisa y capturar todo el contenido audible.",
-                suppress_tokens=[],
-                max_new_tokens=128
+                vad_parameters=dict(min_silence_duration_ms=500)
             )
             
             with open(output_path, 'w', encoding='utf-8') as f:

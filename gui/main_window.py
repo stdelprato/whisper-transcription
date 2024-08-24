@@ -1,8 +1,10 @@
 import os
+import subprocess
 import json
 import time
 from utils.audio_utils import get_audio_duration, format_duration
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QMainWindow, QButtonGroup, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
 from gui.ui_components import setup_ui, setup_connections, set_style
 from core.file_loader import LoadFilesThread
@@ -15,7 +17,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        self.base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.desktop_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'transcription_data.json')
         
         self.setWindowTitle(config.APP_TITLE)
@@ -28,8 +31,8 @@ class MainWindow(QMainWindow):
         self.total_transcription_time = 0
         self.total_audio_duration = 0
 
-        self.selected_model = "faster-whisper"
-        self.pipe = None  # Inicializamos pipe a None
+        self.selected_model = "faster-whisper-xxl"
+        self.pipe = None
         self.audio_files = []
         self.current_language = None
         self.translate = False
@@ -38,12 +41,20 @@ class MainWindow(QMainWindow):
 
         self.transcription_data = self.load_transcription_data()
 
-        setup_ui(self)
-        self.setup_temperature_selection()
+        setup_ui(self)  # Primero, configuramos la UI
+        self.setup_temperature_selection()  # Luego, configuramos la selección de temperatura
+        
+        # Verificar la existencia de la carpeta Faster-Whisper XXL
+        self.has_faster_whisper_xxl = self.check_faster_whisper_xxl_folder()
+        
+        # Configurar el botón Faster-Whisper XXL
+        self.setup_faster_whisper_xxl_button()
+        
+        setup_connections(self)  # Ahora configuramos las conexiones
+        
         self.auto_detect_btn.setChecked(True)
         self.on_lang_button_clicked(self.auto_detect_btn)
         self.update_transcribe_buttons()
-        setup_connections(self)
         self.update_button_states()
 
         set_style(self)
@@ -63,13 +74,14 @@ class MainWindow(QMainWindow):
         for button in self.temp_buttons.buttons():
             button.clicked.connect(self.update_estimate)
         
-        # Conectar los botones de selección de modelo
-        self.faster_whisper_btn.clicked.connect(lambda: self.set_model("faster-whisper"))
-        self.original_whisper_btn.clicked.connect(lambda: self.set_model("original-whisper"))
+        # Verificar la existencia de la carpeta Faster-Whisper XXL
+        self.has_faster_whisper_xxl = self.check_faster_whisper_xxl_folder()
+        
+        # Configurar el botón Faster-Whisper XXL
+        self.setup_faster_whisper_xxl_button()
 
-        # Asegurarse de que el modelo correcto esté seleccionado y cargado por defecto
-        self.faster_whisper_btn.setChecked(True)
-        self.set_model("faster-whisper")
+        # Establecer el modelo predeterminado
+        self.set_model("faster-whisper-xxl")
 
         self.transcription_data = self.load_transcription_data()
 
@@ -151,8 +163,53 @@ class MainWindow(QMainWindow):
 
     def set_model(self, model):
         self.selected_model = model
-        self.pipe = None  # Reseteamos el pipe para que se cargue el nuevo modelo cuando sea necesario
+        self.pipe = None
+        
+        # Actualizar el estado de los botones y su estilo
+        buttons = [
+            (self.faster_whisper_xxl_btn, "faster-whisper-xxl"),
+            (self.faster_whisper_btn, "faster-whisper"),
+            (self.original_whisper_btn, "original-whisper")
+        ]
+        
+        for button, button_model in buttons:
+            is_selected = (model == button_model)
+            button.setChecked(is_selected)
+            if is_selected:
+                button.setStyleSheet("background-color: #3A7CA5; color: white;")
+            else:
+                button.setStyleSheet("")  # Resetear al estilo por defecto
+        
+        # Habilitar/deshabilitar botones de calidad según el modelo seleccionado
+        for button in self.temp_buttons.buttons():
+            button.setEnabled(model != "faster-whisper-xxl")
+        
         print(f"Modelo seleccionado: {model}")
+
+    def check_faster_whisper_xxl_folder(self):
+        for item in os.listdir(self.base_dir):
+            if item.lower() == 'faster-whisper-xxl':
+                return True
+        return False
+    
+    def setup_faster_whisper_xxl_button(self):
+        self.has_faster_whisper_xxl = self.check_faster_whisper_xxl_folder()
+        
+        if not self.has_faster_whisper_xxl:
+            self.faster_whisper_xxl_btn.setStyleSheet("background-color: #FF0000; color: white;")
+        # No configuramos aquí el estilo para cuando está disponible, lo haremos en set_model
+        
+        self.faster_whisper_xxl_btn.clicked.connect(self.on_faster_whisper_xxl_clicked)
+        
+    def on_faster_whisper_xxl_clicked(self):
+        if not self.has_faster_whisper_xxl:
+            self.output_text.append("Para usar Faster-Whisper XXL, descargue el último release de "
+                                    "github.com/Purfview/whisper-standalone-win y extraiga todo "
+                                    "con la carpeta llamada 'Faster-Whisper-XXL' en el directorio del proyecto.")
+        else:
+            self.selected_model = "faster-whisper-xxl"
+            for button in self.temp_buttons.buttons():
+                button.setEnabled(False)
 
     def update_elapsed_time(self):
         self.elapsed_seconds += 1
@@ -334,42 +391,96 @@ class MainWindow(QMainWindow):
             self.output_text.append("No hay archivos de audio cargados.")
             return
 
-        if not self.pipe:
-            self.output_text.append(f"Cargando modelo {self.selected_model}...")
-            self.load_whisper_model()
+        if self.selected_model == "faster-whisper-xxl":
+            if not self.has_faster_whisper_xxl:
+                self.output_text.append("Faster-Whisper XXL no está disponible. Por favor, descárguelo primero.")
+                return
+            self.transcribe_with_faster_whisper_xxl(selected)
+        else:
+            if not self.pipe:
+                self.output_text.append(f"Cargando modelo {self.selected_model}...")
+                self.load_whisper_model()
 
+            files_to_transcribe = [item.text().split(' | ', 1)[1] for item in self.file_list.selectedItems()] if selected else [self.file_list.item(i).text().split(' | ', 1)[1] for i in range(self.file_list.count())]
+            
+            if not files_to_transcribe:
+                self.output_text.append("No se han seleccionado archivos para transcribir.")
+                return
+
+            self.output_text.append("Iniciando transcripción...")
+            transcription_options = self.get_transcription_options()
+            base_output_dir = os.path.join(self.desktop_dir, "transcription_results")
+
+            self.progress_bar.setValue(0)
+            self.progress_bar.setVisible(True)
+            
+            self.elapsed_seconds = 0
+            self.elapsed_timer.start(1000)
+
+            self.transcription_thread = TranscriptionThread(
+                self.pipe, files_to_transcribe, self.folder_input.text(), 
+                self.current_language, self.translate, 
+                transcription_options, self.auto_detect, 
+                base_output_dir, self.selected_model
+            )
+            self.transcription_thread.transcription_done.connect(self.on_transcription_done)
+            self.transcription_thread.all_transcriptions_done.connect(self.on_all_transcriptions_done)
+            self.transcription_thread.progress_update.connect(self.update_progress)
+
+            self.transcription_start_time = time.time()
+            self.progress_timer = QTimer(self)
+            self.progress_timer.timeout.connect(self.update_progress)
+            self.progress_timer.start(1000)
+
+            self.transcription_thread.start()
+    
+    def transcribe_with_faster_whisper_xxl(self, selected=True):
         files_to_transcribe = [item.text().split(' | ', 1)[1] for item in self.file_list.selectedItems()] if selected else [self.file_list.item(i).text().split(' | ', 1)[1] for i in range(self.file_list.count())]
         
         if not files_to_transcribe:
             self.output_text.append("No se han seleccionado archivos para transcribir.")
             return
 
-        self.output_text.append("Iniciando transcripción...")
-        transcription_options = self.get_transcription_options()
-        base_output_dir = os.path.join(self.base_dir, "transcription_results")
+        self.output_text.append("Iniciando transcripción con Faster-Whisper XXL...")
+        base_output_dir = os.path.join(self.desktop_dir, "transcription_results")
 
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(True)
+        # Ruta absoluta al ejecutable
+        executable_path = os.path.abspath(os.path.join(self.base_dir, "Faster-Whisper-XXL", "faster-whisper-xxl.exe"))
         
-        self.elapsed_seconds = 0
-        self.elapsed_timer.start(1000)
+        if not os.path.exists(executable_path):
+            self.output_text.append(f"Error: No se encontró el ejecutable en {executable_path}")
+            return
 
-        self.transcription_thread = TranscriptionThread(
-            self.pipe, files_to_transcribe, self.folder_input.text(), 
-            self.current_language, self.translate, 
-            transcription_options, self.auto_detect, 
-            base_output_dir, self.selected_model
-        )
-        self.transcription_thread.transcription_done.connect(self.on_transcription_done)
-        self.transcription_thread.all_transcriptions_done.connect(self.on_all_transcriptions_done)
-        self.transcription_thread.progress_update.connect(self.update_progress)
+        for audio_file in files_to_transcribe:
+            if ' > ' in audio_file:
+                subfolder, filename = audio_file.split(' > ')
+                input_path = os.path.join(self.folder_input.text(), subfolder, filename)
+                output_subfolder = os.path.join(base_output_dir, subfolder)
+            else:
+                input_path = os.path.join(self.folder_input.text(), audio_file)
+                output_subfolder = base_output_dir
 
-        self.transcription_start_time = time.time()
-        self.progress_timer = QTimer(self)
-        self.progress_timer.timeout.connect(self.update_progress)
-        self.progress_timer.start(1000)
+            os.makedirs(output_subfolder, exist_ok=True)
+            
+            language_option = f"-l {self.current_language}" if self.current_language else ""
+            task_option = "translate" if self.translate else "transcribe"
+            
+            command = f'"{executable_path}" "{input_path}" {language_option} -m large-v2 --task {task_option} --sentence --output_dir "{output_subfolder}" --output_format txt'
+            self.output_text.append(f"Ejecutando comando: {command}")
 
-        self.transcription_thread.start()
+            try:
+                process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                stdout, stderr = process.communicate()
+                
+                if process.returncode == 0:
+                    self.output_text.append(f"Transcripción completada para: {audio_file}")
+                    self.output_text.append(stdout)
+                else:
+                    self.output_text.append(f"Error al transcribir {audio_file}: {stderr}")
+            except Exception as e:
+                self.output_text.append(f"Error al ejecutar el comando para {audio_file}: {str(e)}")
+
+        self.output_text.append("Todas las transcripciones han sido completadas.")
 
     def load_whisper_model(self):
         if self.selected_model == "faster-whisper":

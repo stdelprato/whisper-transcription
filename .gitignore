@@ -3,6 +3,11 @@ __pycache__/
 
 # Ignore the virtual environment directory
 whisper-transcription-env/
+whisper_transcription_env/
+
+Faster-Whisper-XXL/
+
+.cache/
 
 transcription_results/
 transcription_data.json
