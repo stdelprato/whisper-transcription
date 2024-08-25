@@ -21,14 +21,14 @@ def setup_ui(window):
     window.es_btn = QPushButton("Español")
     window.en_btn = QPushButton("Inglés")
     window.auto_btn = QPushButton("Auto-detectar")
-    window.auto_detect_btn = QPushButton("Auto-detectar y traducir")
     
-    buttons = [window.es_btn, window.en_btn, window.auto_btn, window.auto_detect_btn]
+    buttons = [window.es_btn, window.en_btn, window.auto_btn]
     for btn in buttons:
         btn.setCheckable(True)
         window.lang_group.addButton(btn)
         lang_layout.addWidget(btn)
     
+    window.es_btn.setChecked(True)  # Establecer Español como predeterminado
     window.layout.addLayout(lang_layout)
 
     # Botones de traducción
@@ -37,6 +37,7 @@ def setup_ui(window):
     window.no_translate_btn = QPushButton("No traducir a Inglés")
     window.translate_btn.setCheckable(True)
     window.no_translate_btn.setCheckable(True)
+    window.translate_btn.setChecked(True)  # Establecer "Traducir a Inglés" como predeterminado
     trans_layout.addWidget(window.translate_btn)
     trans_layout.addWidget(window.no_translate_btn)
     window.layout.addLayout(trans_layout)
@@ -93,7 +94,6 @@ def setup_connections(window):
     window.es_btn.clicked.connect(lambda: window.on_lang_button_clicked(window.es_btn))
     window.en_btn.clicked.connect(lambda: window.on_lang_button_clicked(window.en_btn))
     window.auto_btn.clicked.connect(lambda: window.on_lang_button_clicked(window.auto_btn))
-    window.auto_detect_btn.clicked.connect(lambda: window.on_lang_button_clicked(window.auto_detect_btn))
     
     # Conexiones para los botones de modelo
     window.faster_whisper_xxl_btn.clicked.connect(lambda: window.set_model("faster-whisper-xxl"))

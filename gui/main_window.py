@@ -1,9 +1,12 @@
 import os
+import re
 import subprocess
+import threading
 import json
 import time
+from core.faster_whisper_thread import FasterWhisperXXLThread
 from utils.audio_utils import get_audio_duration, format_duration
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QMainWindow, QButtonGroup, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
 from gui.ui_components import setup_ui, setup_connections, set_style
@@ -34,8 +37,8 @@ class MainWindow(QMainWindow):
         self.selected_model = "faster-whisper-xxl"
         self.pipe = None
         self.audio_files = []
-        self.current_language = None
-        self.translate = False
+        self.current_language = 'es'  # Establecer español como idioma predeterminado
+        self.translate = True  # Establecer traducción como opción predeterminada
         self.auto_detect = False
         self.load_thread = None
 
@@ -52,10 +55,11 @@ class MainWindow(QMainWindow):
         
         setup_connections(self)  # Ahora configuramos las conexiones
         
-        self.auto_detect_btn.setChecked(True)
-        self.on_lang_button_clicked(self.auto_detect_btn)
-        self.update_transcribe_buttons()
+        # Configurar el estado inicial de los botones
+        self.es_btn.setChecked(True)
+        self.translate_btn.setChecked(True)
         self.update_button_states()
+        self.update_transcribe_buttons()
 
         set_style(self)
         
@@ -73,12 +77,6 @@ class MainWindow(QMainWindow):
         
         for button in self.temp_buttons.buttons():
             button.clicked.connect(self.update_estimate)
-        
-        # Verificar la existencia de la carpeta Faster-Whisper XXL
-        self.has_faster_whisper_xxl = self.check_faster_whisper_xxl_folder()
-        
-        # Configurar el botón Faster-Whisper XXL
-        self.setup_faster_whisper_xxl_button()
 
         # Establecer el modelo predeterminado
         self.set_model("faster-whisper-xxl")
@@ -87,29 +85,17 @@ class MainWindow(QMainWindow):
 
     def on_lang_button_clicked(self, button):
         self.auto_detect = False
-        self.translate = False
         self.current_language = None
 
-        if button == self.auto_detect_btn:
+        if button == self.auto_btn:
             self.auto_detect = True
-            self.translate = True
-            print("Auto-detect and translate selected")
+            self.translate = False
         elif button == self.es_btn:
             self.current_language = 'es'
-            # No cambiamos el estado de traducción aquí, se maneja con set_translation
+            self.translate = True  # Establecer traducción como predeterminada para español
         elif button == self.en_btn:
             self.current_language = 'en'
-        else:  # Auto-detectar (sin traducción)
-            self.auto_detect = True
-            print("Auto-detect (without translation) selected")
-
-        self.translate_btn.setEnabled(button == self.es_btn)
-        self.no_translate_btn.setEnabled(button == self.es_btn)
-
-        if button == self.es_btn:
-            if not self.translate_btn.isChecked() and not self.no_translate_btn.isChecked():
-                self.translate_btn.setChecked(True)
-                self.translate = True
+            self.translate = False
 
         self.update_button_states()
         print(f"auto_detect: {self.auto_detect}, translate: {self.translate}, language: {self.current_language}")
@@ -234,6 +220,27 @@ class MainWindow(QMainWindow):
         else:
             self.progress_bar.setFormat("Progreso: N/A")
 
+    def update_progress_bar(self, start, end, audio_file):
+        start_seconds = self.time_to_seconds(start)
+        end_seconds = self.time_to_seconds(end)
+        total_duration = self.get_audio_duration(audio_file)
+        
+        if total_duration > 0:
+            progress = min((end_seconds / total_duration) * 100, 100)  # Asegurarse de que no exceda el 100%
+            self.progress_bar.setValue(int(progress))
+            self.progress_bar.setFormat(f"{progress:.2f}% - {end}")
+            self.output_text.append(f"Progreso: {progress:.2f}% - Tiempo actual: {end}")
+
+    def time_to_seconds(self, time_str):
+        minutes, seconds = time_str.split(':')
+        return int(minutes) * 60 + float(seconds)
+
+    def get_audio_duration(self, audio_file):
+        for file, duration in self.audio_files:
+            if audio_file in file:
+                return duration
+        return 0
+    
     def parse_estimated_time(self, time_text):
         time_parts = time_text.split(": ")[1].split(" ")[0].split(":")
         hours, minutes, seconds = map(int, time_parts)
@@ -295,29 +302,31 @@ class MainWindow(QMainWindow):
         else:
             self.set_translation(False)
         
-        self.auto_detect_btn.setChecked(False)
         self.update_button_states()
 
     def set_translation(self, translate):
         self.translate = translate
-        self.translate_to_english = translate
         self.translate_btn.setChecked(translate)
         self.no_translate_btn.setChecked(not translate)
-        self.update_button_states()
 
     def update_button_states(self):
         is_spanish = self.current_language == 'es'
         self.translate_btn.setEnabled(is_spanish)
         self.no_translate_btn.setEnabled(is_spanish)
+        
         if is_spanish:
             if not self.translate_btn.isChecked() and not self.no_translate_btn.isChecked():
                 self.translate_btn.setChecked(True)
-                self.no_translate_btn.setChecked(False)
-                self.translate_to_english = True
+                self.translate = True
         else:
             self.translate_btn.setChecked(False)
-            self.no_translate_btn.setChecked(True)
-            self.translate_to_english = False
+            self.no_translate_btn.setChecked(False)
+            self.translate = False
+        
+        # Asegurarse de que siempre haya una opción seleccionada cuando el idioma es español
+        if is_spanish and not self.translate_btn.isChecked() and not self.no_translate_btn.isChecked():
+            self.translate_btn.setChecked(True)
+            self.translate = True
     
     def get_transcription_options(self):
         for button in self.temp_buttons.buttons():
@@ -444,13 +453,23 @@ class MainWindow(QMainWindow):
         self.output_text.append("Iniciando transcripción con Faster-Whisper XXL...")
         base_output_dir = os.path.join(self.desktop_dir, "transcription_results")
 
-        # Ruta absoluta al ejecutable
         executable_path = os.path.abspath(os.path.join(self.base_dir, "Faster-Whisper-XXL", "faster-whisper-xxl.exe"))
         
         if not os.path.exists(executable_path):
             self.output_text.append(f"Error: No se encontró el ejecutable en {executable_path}")
             return
 
+        self.transcription_threads = []
+        
+        # Iniciar el temporizador
+        self.elapsed_seconds = 0
+        self.elapsed_timer.start(1000)
+        
+        # Configurar la barra de progreso
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setFormat("0%")
+        
         for audio_file in files_to_transcribe:
             if ' > ' in audio_file:
                 subfolder, filename = audio_file.split(' > ')
@@ -466,21 +485,45 @@ class MainWindow(QMainWindow):
             task_option = "translate" if self.translate else "transcribe"
             
             command = f'"{executable_path}" "{input_path}" {language_option} -m large-v2 --task {task_option} --sentence --output_dir "{output_subfolder}" --output_format txt'
-            self.output_text.append(f"Ejecutando comando: {command}")
+            print(f"Ejecutando comando: {command}")  # Imprimir en la consola normal
+            
+            self.output_text.append(f"Iniciando transcripción para: {audio_file}")
 
-            try:
-                process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                stdout, stderr = process.communicate()
-                
-                if process.returncode == 0:
-                    self.output_text.append(f"Transcripción completada para: {audio_file}")
-                    self.output_text.append(stdout)
-                else:
-                    self.output_text.append(f"Error al transcribir {audio_file}: {stderr}")
-            except Exception as e:
-                self.output_text.append(f"Error al ejecutar el comando para {audio_file}: {str(e)}")
+            thread = FasterWhisperXXLThread(command, audio_file)
+            thread.output_received.connect(self.update_output)
+            thread.progress_update.connect(self.update_progress_bar)
+            thread.transcription_done.connect(self.on_transcription_finished)
+            self.transcription_threads.append(thread)
+            thread.start()
 
-        self.output_text.append("Todas las transcripciones han sido completadas.")
+        self.transcribe_all_btn.setEnabled(False)
+        self.transcribe_selected_btn.setEnabled(False)
+
+    def update_output(self, line):
+        if self.selected_model == "faster-whisper-xxl":
+            print(line)  # Imprimir en la consola normal
+        else:
+            self.output_text.append(line)
+
+    def on_transcription_finished(self, audio_file, success):
+        if success:
+            self.output_text.append(f"Transcripción completada para: {audio_file}")
+        else:
+            self.output_text.append(f"Error al transcribir {audio_file}")
+        
+        # Verificar si todas las transcripciones han terminado
+        if all(not thread.isRunning() for thread in self.transcription_threads):
+            self.output_text.append("Todas las transcripciones han sido completadas.")
+            self.transcribe_all_btn.setEnabled(True)
+            self.transcribe_selected_btn.setEnabled(True)
+            self.elapsed_timer.stop()
+            self.progress_bar.setValue(100)
+            self.progress_bar.setFormat("100%")
+            self.update_elapsed_time()  # Actualizar una última vez el tiempo transcurrido
+            
+            # Reiniciar el temporizador
+            self.elapsed_seconds = 0
+            self.elapsed_time_label.setText("Tiempo transcurrido: 00:00")
 
     def load_whisper_model(self):
         if self.selected_model == "faster-whisper":
