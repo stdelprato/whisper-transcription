@@ -229,7 +229,6 @@ class MainWindow(QMainWindow):
         if total_duration > 0:
             progress = min((end_seconds / total_duration) * 100, 100)  # Asegurarse de que no exceda el 100%
             self.progress_bar.setValue(int(progress))
-            self.progress_bar.setFormat(f"{progress:.2f}% - {end}")
 
     def time_to_seconds(self, time_str):
         minutes, seconds = time_str.split(':')
