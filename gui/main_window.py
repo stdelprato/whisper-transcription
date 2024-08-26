@@ -4,6 +4,7 @@ import subprocess
 import threading
 import json
 import time
+from core.sequential_transcription_thread import SequentialTranscriptionThread
 from core.faster_whisper_thread import FasterWhisperXXLThread
 from utils.audio_utils import get_audio_duration, format_duration
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
@@ -229,7 +230,6 @@ class MainWindow(QMainWindow):
             progress = min((end_seconds / total_duration) * 100, 100)  # Asegurarse de que no exceda el 100%
             self.progress_bar.setValue(int(progress))
             self.progress_bar.setFormat(f"{progress:.2f}% - {end}")
-            self.output_text.append(f"Progreso: {progress:.2f}% - Tiempo actual: {end}")
 
     def time_to_seconds(self, time_str):
         minutes, seconds = time_str.split(':')
@@ -265,6 +265,16 @@ class MainWindow(QMainWindow):
         self.load_thread.file_found.connect(self.add_file_to_list)
         self.load_thread.finished.connect(self.on_file_loading_finished)
         
+        # Mostrar mensaje de carga
+        self.loading_label = QLabel("Buscando archivos de audio...", self)
+        self.loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.loading_label.setStyleSheet("background-color: rgba(0, 0, 0, 150); color: white; padding: 10px;")
+        self.loading_label.resize(300, 50)
+        self.loading_label.move((self.width() - self.loading_label.width()) // 2,
+                                (self.height() - self.loading_label.height()) // 2)
+        self.loading_label.show()
+        
+        # Deshabilitar controles
         self.setEnabled(False)
         
         self.load_thread.start()
@@ -289,6 +299,7 @@ class MainWindow(QMainWindow):
 
     def on_file_loading_finished(self):
         self.setEnabled(True)
+        self.loading_label.hide()
         self.update_transcribe_buttons()
 
     def set_language(self, lang):
@@ -459,8 +470,6 @@ class MainWindow(QMainWindow):
             self.output_text.append(f"Error: No se encontró el ejecutable en {executable_path}")
             return
 
-        self.transcription_threads = []
-        
         # Iniciar el temporizador
         self.elapsed_seconds = 0
         self.elapsed_timer.start(1000)
@@ -469,35 +478,29 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(True)
         self.progress_bar.setFormat("0%")
+
+        self.transcription_thread = SequentialTranscriptionThread(
+            files_to_transcribe, executable_path, base_output_dir, 
+            self.folder_input.text(), self.current_language, self.translate
+        )
+        self.transcription_thread.transcription_started.connect(lambda file: self.output_text.append(f"Iniciando transcripción para: {file}"))
+        self.transcription_thread.output_received.connect(self.update_output)
+        self.transcription_thread.progress_update.connect(self.update_progress_bar)
+        self.transcription_thread.transcription_finished.connect(self.on_transcription_finished)
+        self.transcription_thread.finished.connect(self.on_all_transcriptions_finished)
         
-        for audio_file in files_to_transcribe:
-            if ' > ' in audio_file:
-                subfolder, filename = audio_file.split(' > ')
-                input_path = os.path.join(self.folder_input.text(), subfolder, filename)
-                output_subfolder = os.path.join(base_output_dir, subfolder)
-            else:
-                input_path = os.path.join(self.folder_input.text(), audio_file)
-                output_subfolder = base_output_dir
-
-            os.makedirs(output_subfolder, exist_ok=True)
-            
-            language_option = f"-l {self.current_language}" if self.current_language else ""
-            task_option = "translate" if self.translate else "transcribe"
-            
-            command = f'"{executable_path}" "{input_path}" {language_option} -m large-v2 --task {task_option} --sentence --output_dir "{output_subfolder}" --output_format txt'
-            print(f"Ejecutando comando: {command}")  # Imprimir en la consola normal
-            
-            self.output_text.append(f"Iniciando transcripción para: {audio_file}")
-
-            thread = FasterWhisperXXLThread(command, audio_file)
-            thread.output_received.connect(self.update_output)
-            thread.progress_update.connect(self.update_progress_bar)
-            thread.transcription_done.connect(self.on_transcription_finished)
-            self.transcription_threads.append(thread)
-            thread.start()
+        self.transcription_thread.start()
 
         self.transcribe_all_btn.setEnabled(False)
         self.transcribe_selected_btn.setEnabled(False)
+
+    def on_all_transcriptions_finished(self):
+        self.output_text.append("Todas las transcripciones han sido completadas.")
+        self.transcribe_all_btn.setEnabled(True)
+        self.transcribe_selected_btn.setEnabled(True)
+        self.elapsed_timer.stop()
+        self.progress_bar.setValue(100)
+        self.progress_bar.setFormat("100%")
 
     def update_output(self, line):
         if self.selected_model == "faster-whisper-xxl":
@@ -508,22 +511,9 @@ class MainWindow(QMainWindow):
     def on_transcription_finished(self, audio_file, success):
         if success:
             self.output_text.append(f"Transcripción completada para: {audio_file}")
+            self.output_text.append(f"-------------------------------------------")
         else:
             self.output_text.append(f"Error al transcribir {audio_file}")
-        
-        # Verificar si todas las transcripciones han terminado
-        if all(not thread.isRunning() for thread in self.transcription_threads):
-            self.output_text.append("Todas las transcripciones han sido completadas.")
-            self.transcribe_all_btn.setEnabled(True)
-            self.transcribe_selected_btn.setEnabled(True)
-            self.elapsed_timer.stop()
-            self.progress_bar.setValue(100)
-            self.progress_bar.setFormat("100%")
-            self.update_elapsed_time()  # Actualizar una última vez el tiempo transcurrido
-            
-            # Reiniciar el temporizador
-            self.elapsed_seconds = 0
-            self.elapsed_time_label.setText("Tiempo transcurrido: 00:00")
 
     def load_whisper_model(self):
         if self.selected_model == "faster-whisper":
