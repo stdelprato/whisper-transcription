@@ -8,7 +8,7 @@ import time
 from core.sequential_transcription_thread import SequentialTranscriptionThread
 from core.faster_whisper_thread import FasterWhisperXXLThread
 from utils.audio_utils import get_audio_duration, format_duration
-from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QDir
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QDir, QFileSystemWatcher
 from PyQt6.QtGui import QColor, QIcon, QStandardItemModel, QStandardItem
 from PyQt6.QtWidgets import QMessageBox, QSplitter, QTreeView, QMainWindow, QButtonGroup, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
 from gui.ui_components import setup_ui, setup_connections, set_style
@@ -27,6 +27,14 @@ class MainWindow(QMainWindow):
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'transcription_data.json')
         
+        self.file_watcher = QFileSystemWatcher()
+        self.file_watcher.directoryChanged.connect(self.on_directory_changed)
+        
+        # Agregar el directorio de transcripciones al watcher
+        transcription_dir = os.path.join(self.base_dir, "transcription_results")
+        if os.path.exists(transcription_dir):
+            self.file_watcher.addPath(transcription_dir)
+
         self.setWindowTitle(config.APP_TITLE)
         self.setGeometry(100, 100, 800, 600)
 
@@ -198,6 +206,9 @@ class MainWindow(QMainWindow):
             for button in self.temp_buttons.buttons():
                 button.setEnabled(False)
 
+    def on_directory_changed(self, path):
+        self.populate_tree_view()
+
     def setup_sidebar(self):
         # Crear el widget principal
         main_widget = QWidget()
@@ -214,6 +225,11 @@ class MainWindow(QMainWindow):
         self.sidebar = QWidget()
         self.sidebar.setFixedWidth(250)  # Ajusta este valor según lo necesites
         self.sidebar_layout = QVBoxLayout(self.sidebar)
+        
+        # Botón de actualizar (ahora arriba)
+        self.refresh_btn = QPushButton("Actualizar")
+        self.refresh_btn.clicked.connect(self.populate_tree_view)
+        self.sidebar_layout.addWidget(self.refresh_btn)
         
         # Configurar la vista de árbol
         self.dir_model = QStandardItemModel()
@@ -234,6 +250,7 @@ class MainWindow(QMainWindow):
         self.open_file_btn.clicked.connect(self.open_selected_file)
         self.clean_transcriptions_btn = QPushButton("Limpiar transcripciones")
         self.clean_transcriptions_btn.clicked.connect(self.clean_transcriptions)
+        self.clean_transcriptions_btn.setStyleSheet("background-color: #FF0000; color: white;")
 
         self.sidebar_layout.addWidget(self.tree_view)
         self.sidebar_layout.addWidget(self.open_file_btn)
@@ -270,6 +287,14 @@ class MainWindow(QMainWindow):
         root_dir = os.path.join(self.base_dir, "transcription_results")
         self.dir_model.clear()
         self.add_directory(root_dir, self.dir_model.invisibleRootItem())
+        
+        # Actualizar el watcher con todos los subdirectorios
+        for dirpath, dirnames, filenames in os.walk(root_dir):
+            try:
+                if os.path.exists(dirpath):
+                    self.file_watcher.addPath(dirpath)
+            except Exception as e:
+                print(f"Error al agregar directorio al watcher: {e}")
 
     def add_directory(self, path, parent):
         for item in os.listdir(path):
@@ -277,6 +302,10 @@ class MainWindow(QMainWindow):
             if os.path.isfile(item_path) and item.endswith('.txt'):
                 file_item = QStandardItem(QIcon("file.png"), item)
                 parent.appendRow(file_item)
+            elif os.path.isdir(item_path):
+                dir_item = QStandardItem(QIcon("folder.png"), item)
+                parent.appendRow(dir_item)
+                self.add_directory(item_path, dir_item)
 
     def open_selected_file(self):
         index = self.tree_view.currentIndex()
@@ -619,6 +648,7 @@ class MainWindow(QMainWindow):
         if success:
             self.output_text.append(f"Transcripción completada para: {audio_file}")
             self.output_text.append(f"-------------------------------------------")
+            self.populate_tree_view()
         else:
             self.output_text.append(f"Error al transcribir {audio_file}")
 
