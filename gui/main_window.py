@@ -1,20 +1,23 @@
 import os
 import re
 import subprocess
+import sys
 import threading
 import json
 import time
 from core.sequential_transcription_thread import SequentialTranscriptionThread
 from core.faster_whisper_thread import FasterWhisperXXLThread
 from utils.audio_utils import get_audio_duration, format_duration
-from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QMainWindow, QButtonGroup, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QDir
+from PyQt6.QtGui import QColor, QIcon, QStandardItemModel, QStandardItem
+from PyQt6.QtWidgets import QMessageBox, QSplitter, QTreeView, QMainWindow, QButtonGroup, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
 from gui.ui_components import setup_ui, setup_connections, set_style
 from core.file_loader import LoadFilesThread
 from core.transcriber import TranscriptionThread
 from core.whisper_model import load_whisper_model, load_faster_whisper_model, load_original_whisper_model
 from utils.time_utils import format_time
+from timestamp_notepad import TimestampNotepad
+import shutil
 import config
 
 class MainWindow(QMainWindow):
@@ -22,7 +25,6 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.desktop_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'transcription_data.json')
         
         self.setWindowTitle(config.APP_TITLE)
@@ -45,18 +47,16 @@ class MainWindow(QMainWindow):
 
         self.transcription_data = self.load_transcription_data()
 
-        setup_ui(self)  # Primero, configuramos la UI
-        self.setup_temperature_selection()  # Luego, configuramos la selección de temperatura
-        
-        # Verificar la existencia de la carpeta Faster-Whisper XXL
+        setup_ui(self)
+        self.setup_temperature_selection()
+        self.setup_sidebar()
+
         self.has_faster_whisper_xxl = self.check_faster_whisper_xxl_folder()
         
-        # Configurar el botón Faster-Whisper XXL
         self.setup_faster_whisper_xxl_button()
         
-        setup_connections(self)  # Ahora configuramos las conexiones
+        setup_connections(self)
         
-        # Configurar el estado inicial de los botones
         self.es_btn.setChecked(True)
         self.translate_btn.setChecked(True)
         self.update_button_states()
@@ -197,6 +197,113 @@ class MainWindow(QMainWindow):
             self.selected_model = "faster-whisper-xxl"
             for button in self.temp_buttons.buttons():
                 button.setEnabled(False)
+
+    def setup_sidebar(self):
+        # Crear el widget principal
+        main_widget = QWidget()
+        main_layout = QHBoxLayout(main_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Crear el contenedor central
+        self.central_container = QWidget()
+        self.central_layout = QVBoxLayout(self.central_container)
+        self.central_layout.addWidget(self.central_widget)
+
+        # Crear el sidebar
+        self.sidebar = QWidget()
+        self.sidebar.setFixedWidth(250)  # Ajusta este valor según lo necesites
+        self.sidebar_layout = QVBoxLayout(self.sidebar)
+        
+        # Configurar la vista de árbol
+        self.dir_model = QStandardItemModel()
+        self.tree_view = QTreeView()
+        self.tree_view.setModel(self.dir_model)
+        self.tree_view.setHeaderHidden(True)
+        self.tree_view.setAnimated(False)
+        self.tree_view.setIndentation(20)
+        self.tree_view.setSortingEnabled(True)
+        self.tree_view.setEditTriggers(QTreeView.EditTrigger.NoEditTriggers)
+        self.tree_view.doubleClicked.connect(self.open_selected_file)
+
+        # Poblar el modelo con archivos
+        self.populate_tree_view()
+
+        # Botones del sidebar
+        self.open_file_btn = QPushButton("Abrir")
+        self.open_file_btn.clicked.connect(self.open_selected_file)
+        self.clean_transcriptions_btn = QPushButton("Limpiar transcripciones")
+        self.clean_transcriptions_btn.clicked.connect(self.clean_transcriptions)
+
+        self.sidebar_layout.addWidget(self.tree_view)
+        self.sidebar_layout.addWidget(self.open_file_btn)
+        self.sidebar_layout.addWidget(self.clean_transcriptions_btn)
+
+        # Crear el botón de toggle
+        self.toggle_sidebar_btn = QPushButton(">")
+        self.toggle_sidebar_btn.setFixedSize(20, 60)
+        self.toggle_sidebar_btn.setStyleSheet("background-color: #4A4A4A;")
+        self.toggle_sidebar_btn.clicked.connect(self.toggle_sidebar)
+
+        # Agregar widgets al layout principal
+        main_layout.addWidget(self.central_container)
+        main_layout.addWidget(self.toggle_sidebar_btn)
+        main_layout.addWidget(self.sidebar)
+
+        # Ocultar inicialmente el sidebar
+        self.sidebar.hide()
+
+        self.setCentralWidget(main_widget)
+
+    def toggle_sidebar(self):
+        current_width = self.width()
+        if self.sidebar.isVisible():
+            self.sidebar.hide()
+            self.toggle_sidebar_btn.setText(">")
+            self.resize(current_width - self.sidebar.width(), self.height())
+        else:
+            self.sidebar.show()
+            self.toggle_sidebar_btn.setText("<")
+            self.resize(current_width + self.sidebar.width(), self.height())
+
+    def populate_tree_view(self):
+        root_dir = os.path.join(self.base_dir, "transcription_results")
+        self.dir_model.clear()
+        self.add_directory(root_dir, self.dir_model.invisibleRootItem())
+
+    def add_directory(self, path, parent):
+        for item in os.listdir(path):
+            item_path = os.path.join(path, item)
+            if os.path.isfile(item_path) and item.endswith('.txt'):
+                file_item = QStandardItem(QIcon("file.png"), item)
+                parent.appendRow(file_item)
+
+    def open_selected_file(self):
+        index = self.tree_view.currentIndex()
+        if index.isValid():
+            item = self.dir_model.itemFromIndex(index)
+            file_path = os.path.join(self.base_dir, "transcription_results", item.text())
+            if os.path.isfile(file_path) and file_path.endswith('.txt'):
+                self.open_timestamp_notepad(file_path)
+            else:
+                print(f"Archivo no válido o no existe: {file_path}")
+
+    def open_timestamp_notepad(self, file_path):
+        subprocess.Popen([sys.executable, "timestamp_notepad.py", file_path])
+
+    def clean_transcriptions(self):
+        source_dir = os.path.join(self.base_dir, "transcription_results")
+        target_dir = os.path.join(self.base_dir, "results_trashcan")
+        
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
+        
+        for file in os.listdir(source_dir):
+            if file.endswith('.txt'):
+                shutil.move(os.path.join(source_dir, file), os.path.join(target_dir, file))
+        
+        self.populate_tree_view()  # Actualizar la vista de árbol
+        QMessageBox.information(self, "Limpieza completada", "Las transcripciones han sido movidas a 'results_trashcan'.")
 
     def update_elapsed_time(self):
         self.elapsed_seconds += 1
@@ -429,7 +536,7 @@ class MainWindow(QMainWindow):
 
             self.output_text.append("Iniciando transcripción...")
             transcription_options = self.get_transcription_options()
-            base_output_dir = os.path.join(self.desktop_dir, "transcription_results")
+            base_output_dir = os.path.join(self.base_dir, "transcription_results")
 
             self.progress_bar.setValue(0)
             self.progress_bar.setVisible(True)
@@ -462,7 +569,7 @@ class MainWindow(QMainWindow):
             return
 
         self.output_text.append("Iniciando transcripción con Faster-Whisper XXL...")
-        base_output_dir = os.path.join(self.desktop_dir, "transcription_results")
+        base_output_dir = os.path.join(self.base_dir, "transcription_results")
 
         executable_path = os.path.abspath(os.path.join(self.base_dir, "Faster-Whisper-XXL", "faster-whisper-xxl.exe"))
         
