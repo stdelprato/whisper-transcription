@@ -10,6 +10,7 @@ Faster-Whisper-XXL/
 .cache/
 
 transcription_results/
+results_trashcan/
 transcription_data.json
 
 repopack*
