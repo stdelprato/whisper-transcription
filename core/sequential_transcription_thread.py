@@ -34,7 +34,7 @@ class SequentialTranscriptionThread(QThread):
             language_option = f"-l {self.current_language}" if self.current_language else ""
             task_option = "translate" if self.translate else "transcribe"
             
-            command = f'"{self.executable_path}" "{input_path}" {language_option} -m large-v2 --task {task_option} --sentence --output_dir "{output_subfolder}" --output_format txt'
+            command = f'"{self.executable_path}" "{input_path}" {language_option} -m large-v2 --temperature 0.00001 --compression_ratio_threshold 2 --task {task_option} --sentence --output_dir "{output_subfolder}" --output_format txt'
             
             process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
             
