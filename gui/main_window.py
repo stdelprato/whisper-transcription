@@ -342,6 +342,7 @@ class MainWindow(QMainWindow):
                 dir_item = QStandardItem(QIcon("./images/folder.png"), item)
                 directories.append((dir_item, item_path))
             elif os.path.isfile(item_path) and item.endswith('.txt'):
+                print(item_path)
                 file_item = QStandardItem(QIcon("./images/file.png"), item)
                 files.append(file_item)
         
@@ -364,11 +365,13 @@ class MainWindow(QMainWindow):
 
     def on_item_expanded(self, index):
         item = self.dir_model.itemFromIndex(index)
-        item.setIcon(QIcon("./images/open-folder.png"))
+        if item.hasChildren():  # Verifica si es una carpeta
+            item.setIcon(QIcon("./images/open-folder.png"))
 
     def on_item_collapsed(self, index):
         item = self.dir_model.itemFromIndex(index)
-        item.setIcon(QIcon("./images/folder.png"))
+        if item.hasChildren():  # Verifica si es una carpeta
+            item.setIcon(QIcon("./images/folder.png"))
 
     def open_selected_file(self):
         index = self.tree_view.currentIndex()
