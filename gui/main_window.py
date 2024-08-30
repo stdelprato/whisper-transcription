@@ -8,9 +8,9 @@ import time
 from core.sequential_transcription_thread import SequentialTranscriptionThread
 from core.faster_whisper_thread import FasterWhisperXXLThread
 from utils.audio_utils import get_audio_duration, format_duration
-from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QDir, QFileSystemWatcher
-from PyQt6.QtGui import QColor, QIcon, QStandardItemModel, QStandardItem
-from PyQt6.QtWidgets import QMessageBox, QSplitter, QTreeView, QMainWindow, QButtonGroup, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
+from PyQt6.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal, QDir, QFileSystemWatcher
+from PyQt6.QtGui import QIcon, QFont, QColor, QIcon, QStandardItemModel, QStandardItem
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QMessageBox, QSplitter, QTreeView, QMainWindow, QButtonGroup, QComboBox, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QListWidget, QTextEdit, QFileDialog, QSlider, QProgressBar
 from gui.ui_components import setup_ui, setup_connections, set_style
 from core.file_loader import LoadFilesThread
 from core.transcriber import TranscriptionThread
@@ -226,14 +226,39 @@ class MainWindow(QMainWindow):
         self.sidebar.setFixedWidth(250)  # Ajusta este valor según lo necesites
         self.sidebar_layout = QVBoxLayout(self.sidebar)
         
-        # Botón de actualizar (ahora arriba)
-        self.refresh_btn = QPushButton("Actualizar")
-        self.refresh_btn.clicked.connect(self.populate_tree_view)
-        self.sidebar_layout.addWidget(self.refresh_btn)
-        
         # Configurar la vista de árbol
         self.dir_model = QStandardItemModel()
         self.tree_view = QTreeView()
+        self.tree_view.setIndentation(10)  # Reducir la indentación
+        self.tree_view.setStyleSheet("""
+            QTreeView::branch {
+                background: transparent;
+            }
+            QTreeView::item {
+                padding-left: 0px;
+            }
+        """)
+
+        # Configurar los íconos personalizados
+        self.dir_model.setHorizontalHeaderLabels(["Nombre"])
+        self.tree_view.setIconSize(QSize(16, 16))  # Ajustar el tamaño de los íconos si es necesario
+
+        # Modificar la barra superior del sidebar
+        sidebar_top_layout = QHBoxLayout()
+
+        # Título "Transcripciones"
+        title_label = QLabel("Transcripciones")
+        title_font = QFont()
+        title_font.setPointSize(12)  # Aumentar el tamaño de la fuente
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        sidebar_top_layout.addWidget(title_label)
+
+        self.sidebar_layout.addLayout(sidebar_top_layout)
+        
+        sidebar_top_layout.addStretch()  # Esto empujará el botón de actualizar hacia la derecha
+        
+        self.sidebar_layout.addLayout(sidebar_top_layout)
         self.tree_view.setModel(self.dir_model)
         self.tree_view.setHeaderHidden(True)
         self.tree_view.setAnimated(False)
@@ -242,19 +267,25 @@ class MainWindow(QMainWindow):
         self.tree_view.setEditTriggers(QTreeView.EditTrigger.NoEditTriggers)
         self.tree_view.doubleClicked.connect(self.open_selected_file)
 
+        self.tree_view.expanded.connect(self.on_item_expanded)
+        self.tree_view.collapsed.connect(self.on_item_collapsed)
+
         # Poblar el modelo con archivos
         self.populate_tree_view()
 
-        # Botones del sidebar
-        self.open_file_btn = QPushButton("Abrir")
-        self.open_file_btn.clicked.connect(self.open_selected_file)
-        self.clean_transcriptions_btn = QPushButton("Limpiar transcripciones")
-        self.clean_transcriptions_btn.clicked.connect(self.clean_transcriptions)
-        self.clean_transcriptions_btn.setStyleSheet("background-color: #FF0000; color: white;")
-
         self.sidebar_layout.addWidget(self.tree_view)
-        self.sidebar_layout.addWidget(self.open_file_btn)
-        self.sidebar_layout.addWidget(self.clean_transcriptions_btn)
+
+        # Botones de 'Abrir' y 'Limpiar transcripciones'
+        button_layout = QHBoxLayout()
+        self.open_btn = QPushButton("Abrir")
+        self.open_btn.clicked.connect(self.open_selected_file)
+        button_layout.addWidget(self.open_btn)
+        
+        self.clean_btn = QPushButton("Limpiar transcripciones")
+        self.clean_btn.clicked.connect(self.clean_transcriptions)
+        button_layout.addWidget(self.clean_btn)
+        
+        self.sidebar_layout.addLayout(button_layout)
 
         # Crear el botón de toggle
         self.toggle_sidebar_btn = QPushButton(">")
@@ -288,6 +319,9 @@ class MainWindow(QMainWindow):
         self.dir_model.clear()
         self.add_directory(root_dir, self.dir_model.invisibleRootItem())
         
+        # Expandir todas las carpetas
+        self.tree_view.expandAll()
+        
         # Actualizar el watcher con todos los subdirectorios
         for dirpath, dirnames, filenames in os.walk(root_dir):
             try:
@@ -295,17 +329,46 @@ class MainWindow(QMainWindow):
                     self.file_watcher.addPath(dirpath)
             except Exception as e:
                 print(f"Error al agregar directorio al watcher: {e}")
+        # Forzar actualización de la vista
+        self.tree_view.viewport().update()
 
     def add_directory(self, path, parent):
+        directories = []
+        files = []
+        
         for item in os.listdir(path):
             item_path = os.path.join(path, item)
-            if os.path.isfile(item_path) and item.endswith('.txt'):
-                file_item = QStandardItem(QIcon("file.png"), item)
-                parent.appendRow(file_item)
-            elif os.path.isdir(item_path):
-                dir_item = QStandardItem(QIcon("folder.png"), item)
-                parent.appendRow(dir_item)
-                self.add_directory(item_path, dir_item)
+            if os.path.isdir(item_path):
+                dir_item = QStandardItem(QIcon("./images/folder.png"), item)
+                directories.append((dir_item, item_path))
+            elif os.path.isfile(item_path) and item.endswith('.txt'):
+                file_item = QStandardItem(QIcon("./images/file.png"), item)
+                files.append(file_item)
+        
+        # Agregar primero las carpetas
+        for dir_item, dir_path in directories:
+            parent.appendRow(dir_item)
+            self.add_directory(dir_path, dir_item)
+        
+        # Luego agregar los archivos
+        for file_item in files:
+            parent.appendRow(file_item)
+        
+        # Expandir la carpeta actual
+        if isinstance(parent, QStandardItem):
+            index = self.dir_model.indexFromItem(parent)
+            self.tree_view.expand(index)
+            
+        # Forzar la actualización de los iconos
+        self.tree_view.viewport().update()
+
+    def on_item_expanded(self, index):
+        item = self.dir_model.itemFromIndex(index)
+        item.setIcon(QIcon("./images/open-folder.png"))
+
+    def on_item_collapsed(self, index):
+        item = self.dir_model.itemFromIndex(index)
+        item.setIcon(QIcon("./images/folder.png"))
 
     def open_selected_file(self):
         index = self.tree_view.currentIndex()
@@ -327,10 +390,18 @@ class MainWindow(QMainWindow):
         if not os.path.exists(target_dir):
             os.makedirs(target_dir)
         
-        for file in os.listdir(source_dir):
-            if file.endswith('.txt'):
-                shutil.move(os.path.join(source_dir, file), os.path.join(target_dir, file))
+        def move_txt_files(src, dst):
+            for root, dirs, files in os.walk(src):
+                for file in files:
+                    if file.endswith('.txt'):
+                        rel_path = os.path.relpath(root, src)
+                        dst_path = os.path.join(dst, rel_path)
+                        if not os.path.exists(dst_path):
+                            os.makedirs(dst_path)
+                        shutil.move(os.path.join(root, file), os.path.join(dst_path, file))
         
+        move_txt_files(source_dir, target_dir)
+    
         self.populate_tree_view()  # Actualizar la vista de árbol
         QMessageBox.information(self, "Limpieza completada", "Las transcripciones han sido movidas a 'results_trashcan'.")
 
