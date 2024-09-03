@@ -97,16 +97,21 @@ class TimestampNotepad(tk.Tk):
             file_path = filedialog.askopenfilename(filetypes=[("Archivos de texto", "*.txt")])
         
         if file_path and os.path.isfile(file_path):
-            with open(file_path, 'r', encoding='utf-8') as file:
-                content = file.read()
-                self.text_widget.config(state=tk.NORMAL)  # Temporalmente habilitar edición
-                self.text_widget.delete("1.0", tk.END)
-                self.text_widget.insert(tk.END, content)
-                self.update_layout()
-                self.toggle_text_lock()  # Volver a aplicar el estado de bloqueo
-            self.title(f"Timestamp Notepad - {os.path.basename(file_path)}")
+            try:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    content = file.read()
+                    self.text_widget.config(state=tk.NORMAL)  # Temporalmente habilitar edición
+                    self.text_widget.delete("1.0", tk.END)
+                    self.text_widget.insert(tk.END, content)
+                    self.update_layout()
+                    self.toggle_text_lock()  # Volver a aplicar el estado de bloqueo
+                self.title(f"Timestamp Notepad - {os.path.basename(file_path)}")
+            except Exception as e:
+                print(f"Error al abrir el archivo {file_path}: {str(e)}")
+                messagebox.showerror("Error", f"No se pudo abrir el archivo: {str(e)}")
         else:
             print(f"Archivo no encontrado o no válido: {file_path}")
+            messagebox.showerror("Error", f"Archivo no encontrado o no válido: {file_path}")
     
     def save_file(self):
         file_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Archivos de texto", "*.txt")])

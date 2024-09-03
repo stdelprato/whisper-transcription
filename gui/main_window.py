@@ -377,11 +377,19 @@ class MainWindow(QMainWindow):
         index = self.tree_view.currentIndex()
         if index.isValid():
             item = self.dir_model.itemFromIndex(index)
-            file_path = os.path.join(self.base_dir, "transcription_results", item.text())
+            file_path = self.get_full_path(item)
             if os.path.isfile(file_path) and file_path.endswith('.txt'):
                 self.open_timestamp_notepad(file_path)
             else:
                 print(f"Archivo no válido o no existe: {file_path}")
+
+    def get_full_path(self, item):
+        path = []
+        while item is not None:
+            path.append(item.text())
+            item = item.parent()
+        full_path = os.path.join(self.base_dir, "transcription_results", *reversed(path))
+        return full_path
 
     def open_timestamp_notepad(self, file_path):
         subprocess.Popen([sys.executable, "timestamp_notepad.py", file_path])
