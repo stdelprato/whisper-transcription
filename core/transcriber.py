@@ -68,7 +68,8 @@ class TranscriptionThread(QThread):
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write("Transcripción con timestamps:\n")
                 for segment in segments:
-                    f.write(f"[{self.format_timestamp(segment.start)} -> {self.format_timestamp(segment.end)}] {segment.text}\n")
+                    corrected_text = segment.text.replace("'", "’")
+                    f.write(f"[{self.format_timestamp(segment.start)} -> {self.format_timestamp(segment.end)}] {corrected_text}\n")
         else:
             print("Transcribiendo con Whisper Original")
             generate_kwargs = {
@@ -88,7 +89,7 @@ class TranscriptionThread(QThread):
                     for chunk in result["chunks"]:
                         start = chunk.get('timestamp', [0, 0])[0]
                         end = chunk.get('timestamp', [0, 0])[1]
-                        chunk_text = chunk.get('text', '')
+                        chunk_text = chunk.get('text', '').replace("'", "’")
                         f.write(f"[{self.format_timestamp(start)} -> {self.format_timestamp(end)}] {chunk_text}\n")
                 else:
                     import json
