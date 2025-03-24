@@ -449,9 +449,25 @@ class MainWindow(QMainWindow):
             self.progress_bar.setValue(int(progress))
             self.progress_bar.setFormat(f"{progress:.2f}%")
 
-    def time_to_seconds(self, time_str):
-        minutes, seconds = time_str.split(':')
-        return int(minutes) * 60 + float(seconds)
+    def time_to_seconds(time_str):
+        if ':' not in time_str:
+            return 0
+
+        parts = time_str.split(':')
+
+        if len(parts) == 2:
+            if '.' in seconds:
+                seconds = seconds.split('.')[0]
+            return int(minutes) * 60 + float(seconds)
+
+        elif len(parts) == 3:
+            hours, minutes, seconds = parts
+            if '.' in seconds:
+                seconds = seconds.split('.')[0]
+            return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+        return 0
+
 
     def get_audio_duration(self, audio_file):
         for file, duration in self.audio_files:
