@@ -81,8 +81,15 @@ class SequentialTranscriptionThread(QThread):
                     match = re.search(r'\[(\d{2}:\d{2}\.\d{3}) -->', line)
                     if match:
                         start = match.group(1)
-                        minutes, seconds = start.split(':')
-                        current_time = int(minutes) * 60 + float(seconds)
+                        if ':' in start:
+                            try:
+                                minutes, seconds = start.split(':')
+                                current_time = int(minutes) * 60 + float(seconds)
+                            except Exception:
+                                current_time = 0.0
+                        else:
+                            current_time = 0.0
+
                         progress_percent = (current_time / total_duration) * 100 if total_duration > 0 else 0
                         self.progress_update.emit(start, "progress", audio_file)
 
@@ -98,7 +105,6 @@ class SequentialTranscriptionThread(QThread):
 
                 if not spanish_detected:
                     successful = True
-                    break 
+                    break
 
             self.transcription_finished.emit(audio_file, successful)
- 
