@@ -449,7 +449,7 @@ class MainWindow(QMainWindow):
             self.progress_bar.setValue(int(progress))
             self.progress_bar.setFormat(f"{progress:.2f}%")
 
-    def time_to_seconds(time_str):
+    def time_to_seconds(self, time_str):
         if ':' not in time_str:
             return 0
 
