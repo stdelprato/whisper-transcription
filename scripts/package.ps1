@@ -1,11 +1,17 @@
 # Arma la carpeta que se le pasa a la usuaria: se copia y se abre el .exe. Sin instalador,
 # sin permisos de administrador, sin tocar el registro.
 #
-#   .\scripts\package.ps1 [-Target C:\ruta\de\salida] [-SkipBuild]
+#   .\scripts\package.ps1 [-Target C:\ruta\de\salida] [-SkipBuild] [-SinModelos]
+#
+# -SinModelos deja fuera los 3,1 GB de modelos y la carpeta pesa ~120 MB, que es lo que
+# conviene si hay que mandarla por internet. En la otra máquina se hace doble clic en
+# "Descargar modelos.bat" y se bajan de la fuente original, que además suele ir más
+# rápido que un servicio de archivos.
 
 param(
   [string]$Target = "$PSScriptRoot\..\dist\Transcriptor",
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  [switch]$SinModelos
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,10 +54,17 @@ if ($ff -and (Test-Path $ff)) {
   Write-Warning "no encontre ffmpeg.exe; copialo a mano dentro de $Target"
 }
 
+# --- el bajador de modelos va siempre: sirve para la entrega liviana y para rehacer
+#     los modelos si alguno se corrompe
+Copy-Item (Join-Path $PSScriptRoot "get-models.ps1") (Join-Path $Target "descargar-modelos.ps1") -Force
+Copy-Item (Join-Path $PSScriptRoot "descargar-modelos.bat") (Join-Path $Target "Descargar modelos.bat") -Force
+
 # --- modelos
 $src = Join-Path $root "models"
 $dst = Join-Path $Target "models"
-if (Test-Path $src) {
+if ($SinModelos) {
+  Write-Host "sin modelos: se bajan en la otra maquina" -ForegroundColor Cyan
+} elseif (Test-Path $src) {
   Write-Host "copiando modelos (unos minutos)..." -ForegroundColor Cyan
   robocopy $src $dst /E /NFL /NDL /NJH /NJS /NP | Out-Null
   # robocopy usa 0-7 para exito (1 = copio archivos); solo 8+ es error de verdad
@@ -61,14 +74,27 @@ if (Test-Path $src) {
   Write-Warning "no hay carpeta models/ que copiar"
 }
 
+$primerPaso = if ($SinModelos) {
+@"
+ANTES DE EMPEZAR, UNA SOLA VEZ
+------------------------------
+Doble clic en "Descargar modelos.bat" y dejalo terminar. Baja unos 3,2 GB
+(los modelos de reconocimiento y traduccion) y tarda segun la conexion.
+Se puede cortar y volver a abrir: no repite lo ya bajado.
+
+Despues de eso la aplicacion no vuelve a usar internet nunca mas.
+
+"@
+} else { "" }
+
 @"
 Transcriptor
 ============
-
+$primerPaso
 Abri "Transcriptor.exe". No hace falta instalar nada.
 
 Todo el procesamiento ocurre en esta computadora. La aplicacion no envia audio
-ni texto a ningun servidor: no usa internet en ningun momento.
+ni texto a ningun servidor, ni abre ninguna conexion de red en ningun momento.
 
 Como se usa
 -----------

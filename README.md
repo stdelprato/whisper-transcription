@@ -101,8 +101,12 @@ pipe.exe llamada.mp3 --asr canary --mt nllb --speakers 2 --json salida.json
 ## Entregar
 
 ```powershell
-.\scripts\package.ps1
+.\scripts\package.ps1               # 3,3 GB, todo incluido — para pendrive o disco
+.\scripts\package.ps1 -SinModelos   # 122 MB — para mandar por internet
 ```
 
 Deja en `dist/Transcriptor/` una carpeta que se copia y se abre. Sin instalador ni permisos
-de administrador.
+de administrador. La variante liviana trae un `Descargar modelos.bat` que baja los ~3,2 GB
+de modelos en la máquina de destino, una sola vez.
+
+Ver [INSTALACION.md](INSTALACION.md) para el paso a paso de las dos máquinas.

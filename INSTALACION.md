@@ -55,23 +55,51 @@ O sin interfaz, para ver los números:
 
 ### 3. Armar lo que le pasás a ella
 
+Hay dos formas, según cómo se lo hagas llegar.
+
+**Si es por pendrive o disco** — todo adentro, ella no toca nada:
+
 ```powershell
 .\scripts\package.ps1
 ```
 
-Deja en `dist\Transcriptor\` una carpeta de unos **3,3 GB** con todo adentro:
-el ejecutable, las bibliotecas, ffmpeg, los modelos y un `LEEME.txt`.
+Deja `dist\Transcriptor\`, unos **3,3 GB**: el ejecutable, las bibliotecas, ffmpeg,
+los modelos y un `LEEME.txt`.
+
+**Si es por internet** — 3,3 GB por Drive es una tortura de subida y de bajada, y 3,1 de
+esos GB son modelos públicos que se bajan igual de rápido (o más) desde la fuente:
+
+```powershell
+.\scripts\package.ps1 -SinModelos
+```
+
+Deja **122 MB**. Eso es lo que subís. En su máquina, doble clic en
+**`Descargar modelos.bat`** una sola vez y listo.
 
 ---
 
 ## En la máquina de ella
 
-1. Copiale la carpeta `Transcriptor` entera (pendrive, disco, red — pesa 3,3 GB).
-   Que quede en algún lugar fijo, por ejemplo `C:\Transcriptor`.
-2. Doble clic en **`Transcriptor.exe`**.
+1. Copiale la carpeta `Transcriptor` entera. Que quede en un lugar fijo,
+   por ejemplo `C:\Transcriptor`.
+2. Si la armaste con `-SinModelos`: doble clic en **`Descargar modelos.bat`**
+   y dejalo terminar (~3,2 GB, una sola vez).
+3. Doble clic en **`Transcriptor.exe`**.
 
-Eso es todo. No hay instalador, no pide permisos de administrador, no toca el registro
-y no usa internet.
+No hay instalador, no pide permisos de administrador y no toca el registro. Pasado el
+paso 2, la aplicación no vuelve a abrir ninguna conexión de red.
+
+### Si viene de una descarga, Windows la va a marcar
+
+Cualquier `.exe` bajado de internet arrastra una marca que dispara SmartScreen:
+*«Windows protegió tu PC»*. Es porque el ejecutable no está firmado, no porque haya algo
+raro. Se resuelve con **Más información → Ejecutar de todas formas**.
+
+Para evitarle el susto, quitale la marca a toda la carpeta antes de que la abra:
+
+```powershell
+Get-ChildItem C:\Transcriptor -Recurse | Unblock-File
+```
 
 Conviene mandarle un acceso directo al escritorio: clic derecho sobre `Transcriptor.exe`
 → *Enviar a* → *Escritorio (crear acceso directo)*.

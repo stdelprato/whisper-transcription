@@ -1,10 +1,25 @@
-# Descarga los modelos a models/. Son ~3,2 GB; tarda según la conexión.
+# Descarga los modelos. Son ~3,2 GB; tarda según la conexión.
 # No hace falta Python ni nada más: todo viene ya cuantizado a int8.
 #
-#   .\scripts\get-models.ps1
+#   .\scripts\get-models.ps1              desde el repo
+#   .\descargar-modelos.ps1               desde la carpeta de la app
+#   .\get-models.ps1 -Dest D:\otro\lado
+#
+# Se puede cortar y volver a lanzar: lo ya bajado no se vuelve a bajar.
+
+param([string]$Dest)
 
 $ErrorActionPreference = "Stop"
-$M = Join-Path (Resolve-Path "$PSScriptRoot\..") "models"
+
+if (-not $Dest) {
+  # En el repo los modelos van en ..\models; en la carpeta entregada, al lado del script.
+  $Dest = if (Test-Path (Join-Path $PSScriptRoot "..\Cargo.toml")) {
+    Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..")) "models"
+  } else {
+    Join-Path $PSScriptRoot "models"
+  }
+}
+$M = $Dest
 
 $SHERPA = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
 $HF = "https://huggingface.co"
@@ -85,3 +100,9 @@ FetchHf "JustFrederik/nllb-200-distilled-600M-ct2-int8" `
 
 $gb = (Get-ChildItem $M -Recurse -File | Measure-Object Length -Sum).Sum / 1GB
 Write-Host ("`nlisto: {0}  ({1:N2} GB)" -f $M, $gb) -ForegroundColor Green
+if (Test-Path (Join-Path $PSScriptRoot "Transcriptor.exe")) {
+  Write-Host "ya podés abrir Transcriptor.exe" -ForegroundColor Green
+  Write-Host "`n(esta ventana se cierra sola en 20 segundos)" -ForegroundColor DarkGray
+  Start-Sleep -Seconds 20
+}
+exit 0
