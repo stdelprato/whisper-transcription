@@ -14,6 +14,15 @@ $build = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $
 $rel = Join-Path $build "release"
 
 if (-not $SkipBuild) {
+  # La interfaz se embebe dentro del .exe al compilar, y cargo no siempre se entera de
+  # que cambio un archivo de ui/. Tocamos la fuente para forzar que la vuelva a leer.
+  $marca = Join-Path $root "src-tauri\src\lib.rs"
+  $masNuevo = Get-ChildItem (Join-Path $root "ui") -Recurse -File |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if ($masNuevo -and $masNuevo.LastWriteTime -gt (Get-Item $marca).LastWriteTime) {
+    (Get-Item $marca).LastWriteTime = Get-Date
+  }
+
   Write-Host "compilando..." -ForegroundColor Cyan
   Push-Location $root
   try { cargo build --release } finally { Pop-Location }
@@ -45,7 +54,9 @@ $dst = Join-Path $Target "models"
 if (Test-Path $src) {
   Write-Host "copiando modelos (unos minutos)..." -ForegroundColor Cyan
   robocopy $src $dst /E /NFL /NDL /NJH /NJS /NP | Out-Null
+  # robocopy usa 0-7 para exito (1 = copio archivos); solo 8+ es error de verdad
   if ($LASTEXITCODE -ge 8) { throw "fallo la copia de modelos" }
+  $global:LASTEXITCODE = 0
 } else {
   Write-Warning "no hay carpeta models/ que copiar"
 }
@@ -92,3 +103,5 @@ Ajustes que conviene conocer
 
 $mb = (Get-ChildItem $Target -Recurse -File | Measure-Object Length -Sum).Sum / 1GB
 Write-Host ("listo: {0}  ({1:N2} GB)" -f $Target, $mb) -ForegroundColor Green
+Write-Host "copiala entera a la otra maquina y abri Transcriptor.exe" -ForegroundColor DarkGray
+exit 0

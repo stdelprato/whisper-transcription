@@ -271,7 +271,8 @@ main {
   letter-spacing: .05em;
 }
 
-.badge.spk { background: #26304a; color: #a9c4ff; }
+.badge.spk { background: #26304a; color: #a9c4ff; cursor: text; }
+.badge.spk[contenteditable="true"] { outline: 1px solid var(--accent2); }
 .badge.spk-1 { background: #3a2a1c; color: #ffce9a; }
 .badge.spk-2 { background: #1d3630; color: #97e0c4; }
 .badge.spk-3 { background: #33243a; color: #dcaef0; }

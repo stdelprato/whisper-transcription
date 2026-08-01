@@ -67,8 +67,8 @@ function readOptions() {
  * de prueba; se reemplaza por lo que tarde de verdad en esta en cuanto haya datos.
  */
 const PRESETS = {
-  fast: { asr: "parakeet", mt: "opus", verify: false, rtf: 0.61 },
-  balanced: { asr: "canary", mt: "opus", verify: true, rtf: 1.45 },
+  fast: { asr: "parakeet", mt: "opus", verify: false, rtf: 0.64 },
+  balanced: { asr: "canary", mt: "opus", verify: true, rtf: 1.49 },
   best: { asr: "canary", mt: "nllb", verify: true, rtf: 2.65 },
 };
 
@@ -333,9 +333,17 @@ function nodeFor(id) {
   return $("segments").querySelector(`[data-id="${id}"]`);
 }
 
+/** El nombre que le pusieron al hablante, o "Hablante N". */
+function nombreHablante(k) {
+  const f = state.queue.find((x) => x.path === state.shown);
+  const puesto = f?.transcript?.speaker_names?.[k];
+  return puesto && puesto.trim() ? puesto : `Hablante ${k + 1}`;
+}
+
 function segmentHtml(seg) {
   const spk = seg.speaker == null ? ""
-    : `<span class="badge spk spk-${(seg.speaker % 3) + 1}">Hablante ${seg.speaker + 1}</span>`;
+    : `<span class="badge spk spk-${(seg.speaker % 3) + 1}" data-spk="${seg.speaker}"
+         title="Doble clic para ponerle nombre">${esc(nombreHablante(seg.speaker))}</span>`;
   const rescatado = seg.repaired
     ? `<span class="badge repaired" title="El modelo principal se enganchó repitiendo; este texto viene del segundo modelo">rescatado</span>`
     : "";
@@ -459,11 +467,40 @@ $("segments").addEventListener("click", (e) => {
 
 $("segments").addEventListener("dblclick", (e) => {
   clearTimeout(clicPendiente);
+  const chip = e.target.closest(".badge.spk");
+  if (chip) { renombrarHablante(chip); return; }
   const el = e.target.closest(".seg");
   if (!el || el.classList.contains("editing")) return;
   const seg = state.segments.find((s) => s.id === +el.dataset.id);
   if (seg) editar(el, seg);
 });
+
+/** Cambia "Hablante 2" por el nombre que quiera, en todos los bloques de esa persona. */
+function renombrarHablante(chip) {
+  const k = +chip.dataset.spk;
+  const f = state.queue.find((x) => x.path === state.shown);
+  if (!f?.transcript) return;
+  chip.contentEditable = "true";
+  chip.focus();
+  document.execCommand?.("selectAll", false, null);
+
+  const terminar = async () => {
+    chip.contentEditable = "false";
+    const nombre = chip.textContent.trim();
+    const names = f.transcript.speaker_names ?? (f.transcript.speaker_names = []);
+    while (names.length <= k) names.push("");
+    names[k] = nombre === `Hablante ${k + 1}` ? "" : nombre;
+    try {
+      await invoke("set_transcript", { transcript: f.transcript });
+      await invoke("set_speaker_name", { index: k, name: names[k] });
+    } catch (e) { toast(String(e)); }
+    drawAll();
+  };
+  chip.addEventListener("blur", terminar, { once: true });
+  chip.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === "Escape") { ev.preventDefault(); chip.blur(); }
+  });
+}
 
 /* ------------------------------------------------------------ reproductor */
 

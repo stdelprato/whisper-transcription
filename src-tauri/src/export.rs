@@ -55,9 +55,9 @@ fn srt_stamp(secs: f32) -> String {
     )
 }
 
-fn speaker_label(seg: &Segment) -> String {
+fn speaker_label(t: &Transcript, seg: &Segment) -> String {
     seg.speaker
-        .map(|k| format!("Hablante {}", k + 1))
+        .map(|k| pipeline::speaker_label(&t.speaker_names, k))
         .unwrap_or_default()
 }
 
@@ -79,7 +79,7 @@ fn lines(seg: &Segment, content: Content) -> Vec<&str> {
 fn txt(t: &Transcript, content: Content, with_speakers: bool) -> String {
     let mut out = String::new();
     for seg in &t.segments {
-        let spk = speaker_label(seg);
+        let spk = speaker_label(t, seg);
         let head = if with_speakers && !spk.is_empty() {
             format!("[{}] {}", stamp(seg.start), spk)
         } else {
@@ -146,7 +146,7 @@ fn rtf(t: &Transcript, content: Content, with_speakers: bool) -> String {
          \\fs22\n",
     );
     for seg in &t.segments {
-        let spk = speaker_label(seg);
+        let spk = speaker_label(t, seg);
         let head = if with_speakers && !spk.is_empty() {
             format!("{}  {}", stamp(seg.start), spk)
         } else {

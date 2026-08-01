@@ -101,6 +101,9 @@ pub struct Transcript {
     pub denoised: bool,
     pub segments: Vec<Segment>,
     pub num_speakers: usize,
+    /// Nombres puestos a mano, por índice de hablante. Vacío = "Hablante N".
+    #[serde(default)]
+    pub speaker_names: Vec<String>,
     pub timings: Timings,
     /// Se interrumpió a mitad; lo que hay es parcial pero utilizable.
     #[serde(default)]
@@ -444,9 +447,19 @@ pub fn run<P: AsRef<Path>>(
         denoised: opts.denoise,
         segments,
         num_speakers,
+        speaker_names: Vec::new(),
         timings,
         cancelled,
     })
+}
+
+/// Cómo llamar a un hablante: el nombre que le pusieron, o "Hablante N".
+pub fn speaker_label(names: &[String], speaker: i32) -> String {
+    names
+        .get(speaker.max(0) as usize)
+        .filter(|n| !n.trim().is_empty())
+        .cloned()
+        .unwrap_or_else(|| format!("Hablante {}", speaker + 1))
 }
 
 fn diar_options(opts: &Options) -> DiarOptions {

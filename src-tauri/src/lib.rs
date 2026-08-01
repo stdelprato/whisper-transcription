@@ -385,6 +385,31 @@ fn update_segment(
     Ok(())
 }
 
+/// Le pone nombre a un hablante ("Cliente", "Abogada"...) en vez de "Hablante 2".
+#[tauri::command]
+fn set_speaker_name(state: State<'_, AppState>, index: i32, name: String) -> Result<(), String> {
+    let mut guard = state
+        .transcript
+        .lock()
+        .unwrap();
+    let t = guard
+        .as_mut()
+        .ok_or("todavía no hay nada procesado")?;
+    let i = index.max(0) as usize;
+    if t.speaker_names
+        .len()
+        <= i
+    {
+        t.speaker_names
+            .resize(i + 1, String::new());
+    }
+    t.speaker_names[i] = name
+        .trim()
+        .to_string();
+    save_result(t);
+    Ok(())
+}
+
 #[tauri::command]
 fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
     app.clipboard()
@@ -427,6 +452,7 @@ pub fn run() {
             rediarize,
             set_transcript,
             load_result,
+            set_speaker_name,
             update_segment,
             copy_text,
             export,
