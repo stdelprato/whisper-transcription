@@ -132,7 +132,90 @@ async function boot() {
     $("options").hidden = false;
   }
   syncPreset();
+  abrirCarpeta(null);
 }
+
+/* ------------------------------------------------------- explorador */
+
+const nav = { path: null, audios: [] };
+
+function tam(bytes) {
+  return bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`;
+}
+
+async function abrirCarpeta(path) {
+  let l;
+  try {
+    l = await invoke("browse", { path: path ?? null });
+  } catch (e) {
+    toast(String(e));
+    return;
+  }
+  nav.path = l.path;
+  nav.audios = l.audios;
+  $("br-path").textContent = l.path;
+
+  $("br-folders").innerHTML = l.folders.map((f) =>
+    `<div class="tile${f.workday ? " workday" : ""}" data-path="${esc(f.path)}">${esc(f.name)}</div>`
+  ).join("") || `<span class="hint">no hay subcarpetas acá</span>`;
+
+  $("br-files").innerHTML = l.audios.map((a) =>
+    `<div class="frow" data-path="${esc(a.path)}">
+       <span class="tick">${a.done ? "✓" : "&nbsp;"}</span>
+       <span>${esc(a.name)}</span>
+       <span class="sz">${tam(a.size)}</span>
+     </div>`
+  ).join("");
+
+  const n = l.total_audios;
+  const recortado = n > l.audios.length ? ` (se muestran los primeros ${l.audios.length})` : "";
+  const yaHechos = l.audios.filter((a) => a.done).length;
+  $("br-info").textContent = n
+    ? `${n} ${n === 1 ? "audio" : "audios"}${recortado}${yaHechos ? ` · ${yaHechos} ya procesados` : ""}`
+    : (l.has_workdays ? "elegí la carpeta del día" : "sin audios en esta carpeta");
+  $("br-all").disabled = !l.audios.some((a) => !a.done);
+  $("br-up").disabled = !l.parent;
+  $("br-up").dataset.path = l.parent ?? "";
+}
+
+$("br-folders").addEventListener("click", (e) => {
+  const t = e.target.closest(".tile");
+  if (t) abrirCarpeta(t.dataset.path);
+});
+
+$("br-files").addEventListener("click", (e) => {
+  const r = e.target.closest(".frow");
+  if (!r) return;
+  enqueue([r.dataset.path]);
+  $("browser").hidden = true;
+});
+
+$("br-up").addEventListener("click", (e) => {
+  if (e.currentTarget.dataset.path) abrirCarpeta(e.currentTarget.dataset.path);
+});
+
+$("br-home").addEventListener("click", () => abrirCarpeta(null));
+
+$("br-pick").addEventListener("click", async () => {
+  try {
+    const p = await invoke("pick_root");
+    if (p) { toast("carpeta base guardada"); abrirCarpeta(p); }
+  } catch (e) { toast(String(e)); }
+});
+
+$("br-all").addEventListener("click", () => {
+  // Los que ya tienen transcripción se recuperan solos; no hace falta filtrarlos acá.
+  const pendientes = nav.audios.filter((a) => !a.done).map((a) => a.path);
+  if (!pendientes.length) return;
+  enqueue(pendientes);
+  $("browser").hidden = true;
+});
+
+$("toggle-browser").addEventListener("click", () => {
+  const oculto = $("browser").hidden;
+  $("browser").hidden = !oculto;
+  if (oculto) abrirCarpeta(nav.path);
+});
 
 /* ------------------------------------------------------------------- cola */
 
@@ -567,8 +650,8 @@ document.addEventListener("keydown", (e) => {
 /* ------------------------------------------------------------- botonera */
 
 $("open").addEventListener("click", async () => {
-  const paths = await invoke("pick_audio");
-  if (paths?.length) enqueue(paths);
+  const paths = await invoke("pick_audio", { from: nav.path });
+  if (paths?.length) { enqueue(paths); $("browser").hidden = true; }
 });
 
 $("cancel").addEventListener("click", () => {

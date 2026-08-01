@@ -8,7 +8,8 @@
 </head>
 <body>
   <header class="bar">
-    <button id="open" class="primary">Abrir audio</button>
+    <button id="toggle-browser" class="primary">Carpetas</button>
+    <button id="open">Abrir audio</button>
     <span id="file" class="file"></span>
     <span class="spacer"></span>
     <button id="toggle-options">Ajustes</button>
@@ -111,12 +112,29 @@
     </div>
   </section>
 
+  <section id="browser" class="panel browser">
+    <div class="row">
+      <button id="br-up" title="Subir un nivel">↑</button>
+      <button id="br-home" title="Volver a la carpeta base">Base</button>
+      <span id="br-path" class="path"></span>
+      <span class="spacer"></span>
+      <button id="br-pick">Cambiar carpeta base</button>
+    </div>
+    <div id="br-folders" class="tiles"></div>
+    <div id="br-files" class="files"></div>
+    <div class="row">
+      <span id="br-info" class="hint"></span>
+      <span class="spacer"></span>
+      <button id="br-all" class="primary" disabled>Procesar todos</button>
+    </div>
+  </section>
+
   <div id="queue" class="queue" hidden></div>
 
   <main id="main">
     <div id="empty" class="empty">
-      <h1>Arrastrá un audio acá</h1>
-      <p>o usá <b>Abrir audio</b>. Todo se procesa en esta computadora: nada sale a internet.</p>
+      <h1>Elegí la carpeta del día</h1>
+      <p>o arrastrá un audio acá. Todo se procesa en esta computadora: nada sale a internet.</p>
       <p class="hint">Clic en un bloque para copiarlo · doble clic para corregirlo · clic en la hora para saltar ahí</p>
     </div>
     <div id="segments"></div>

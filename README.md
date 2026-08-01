@@ -51,6 +51,15 @@ Dos conclusiones que decidieron el diseño:
    Canary y aun así produce peor traducción. No hay que elegir entre calidad y velocidad:
    Canary → NLLB gana en las dos cosas frente a lo que había.
 
+## El explorador no recorre nada en profundidad
+
+El material se organiza en una carpeta base con una subcarpeta por jornada («Lunes 3»,
+«Miércoles 5»), y al lado hay carpetas con miles de audios viejos. Por eso el explorador
+**lista un solo directorio y para**: buscar audios recursivamente ahí tardaría muchísimo y
+no serviría para nada. Las carpetas con nombre de jornada —con tilde o sin ella— se
+detectan, se destacan y se ordenan de más reciente a más vieja; el resto queda visible
+pero apagado.
+
 ## Los dos modelos trabajan juntos
 
 Canary lee mejor pero es un encoder-decoder, y esos se enganchan repitiendo: en la llamada

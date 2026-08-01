@@ -1,5 +1,6 @@
 //! Capa de aplicación: expone el núcleo a la interfaz y gestiona el trabajo en curso.
 
+pub mod browse;
 mod export;
 
 use std::path::{Path, PathBuf};
@@ -18,11 +19,7 @@ const REPRODUCIBLES: &[&str] = &[
     "mp3", "m4a", "mp4", "aac", "wav", "ogg", "oga", "opus", "webm", "flac",
 ];
 
-/// Extensiones que se ofrecen en el diálogo de abrir.
-const AUDIOS: &[&str] = &[
-    "mp3", "wav", "m4a", "mp4", "aac", "ogg", "oga", "opus", "flac", "wma", "amr", "3gp", "aiff",
-    "webm", "mkv", "avi", "mov",
-];
+use browse::AUDIOS;
 
 #[derive(Default)]
 pub struct AppState {
@@ -163,15 +160,56 @@ fn app_info() -> Info {
 }
 
 #[tauri::command]
-fn pick_audio(app: AppHandle) -> Vec<String> {
+fn pick_audio(app: AppHandle, from: Option<String>) -> Vec<String> {
+    let dir = from
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .unwrap_or_else(browse::default_root);
     app.dialog()
         .file()
+        .set_directory(dir)
         .add_filter("Audio y vídeo", AUDIOS)
         .blocking_pick_files()
         .unwrap_or_default()
         .into_iter()
         .map(|f| f.to_string())
         .collect()
+}
+
+/// Lista una carpeta: sus subcarpetas y sus audios. Un solo nivel, nunca recursivo.
+#[tauri::command]
+fn browse(path: Option<String>) -> Result<browse::Listing, String> {
+    let dir = path
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .unwrap_or_else(browse::default_root);
+    browse::list(&dir).map_err(|e| format!("no pude leer {}: {e}", dir.display()))
+}
+
+/// La carpeta base con la que arranca el explorador.
+#[tauri::command]
+fn get_root() -> String {
+    browse::default_root()
+        .display()
+        .to_string()
+}
+
+/// Elige otra carpeta base y la recuerda.
+#[tauri::command]
+fn pick_root(app: AppHandle) -> Result<Option<String>, String> {
+    let Some(dir) = app
+        .dialog()
+        .file()
+        .set_directory(browse::default_root())
+        .blocking_pick_folder()
+    else {
+        return Ok(None);
+    };
+    let path = dir.to_string();
+    let mut s = browse::load_settings();
+    s.root = Some(path.clone());
+    browse::save_settings(&s)?;
+    Ok(Some(path))
 }
 
 #[tauri::command]
@@ -445,6 +483,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             pick_audio,
+            browse,
+            get_root,
+            pick_root,
             save_as,
             prepare_playback,
             start,

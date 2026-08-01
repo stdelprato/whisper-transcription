@@ -38,6 +38,14 @@ if (-not $SkipBuild) {
 New-Item -ItemType Directory -Force $Target | Out-Null
 $Target = (Resolve-Path $Target).Path
 
+# Si la app de la entrega anterior sigue abierta, el .exe esta bloqueado y la copia falla
+# con un error que no dice nada util.
+$abierta = Get-Process Transcriptor -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -like (Join-Path $Target "*") }
+if ($abierta) {
+  throw "cerra el Transcriptor que esta corriendo desde $Target y volve a intentar"
+}
+
 # --- ejecutable y bibliotecas nativas
 Copy-Item (Join-Path $rel "transcriptor.exe") (Join-Path $Target "Transcriptor.exe") -Force
 foreach ($dll in Get-ChildItem $rel -Filter *.dll) {
@@ -99,7 +107,10 @@ ni texto a ningun servidor, ni abre ninguna conexion de red en ningun momento.
 
 Como se usa
 -----------
-1. Arrastra un audio a la ventana (o usa "Abrir audio").
+0. Al abrirse muestra las carpetas de "GoGlobal" del escritorio. Las que tienen
+   nombre de jornada ("Lunes 3", "Miercoles 5") salen destacadas y arriba.
+   Entra en la del dia y elegi un audio, o "Procesar todos".
+1. Tambien podes arrastrar un audio a la ventana (o usar "Abrir audio").
 2. Espera a que termine. Podes escuchar mientras procesa.
 3. Clic en un bloque -> lo copia entero al portapapeles, listo para pegar en Word.
    Doble clic -> lo corregis ahi mismo.

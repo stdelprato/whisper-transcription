@@ -78,6 +78,24 @@ Deja **122 MB**. Eso es lo que subís. En su máquina, doble clic en
 
 ---
 
+## La carpeta de trabajo
+
+Al abrirse, la app muestra un explorador que arranca en **`GoGlobal` del escritorio**.
+No hay nada que configurar: la ruta se resuelve sola en cada máquina, así que en la de
+ella cae en `C:\Users\Mi PC\Desktop\GoGlobal`.
+
+Dentro lista las subcarpetas y **destaca las que tienen nombre de jornada** — «Lunes 3»,
+«Miércoles 5», con o sin tilde —, las pone arriba y ordena de más reciente a más vieja.
+Las demás carpetas siguen visibles, apagadas, por si necesita entrar.
+
+**No recorre nada en profundidad.** Lista un directorio y para. La carpeta de audios
+viejos puede tener miles de archivos y no le cuesta nada, porque nunca entra a mirar.
+
+Si la carpeta base tuviera que ser otra, el botón **Cambiar carpeta base** la recuerda
+(queda en un `ajustes.json` al lado del ejecutable, así que viaja con la carpeta).
+
+---
+
 ## En la máquina de ella
 
 1. Copiale la carpeta `Transcriptor` entera. Que quede en un lugar fijo,
