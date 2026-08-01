@@ -8,8 +8,7 @@
 </head>
 <body>
   <header class="bar">
-    <button id="toggle-browser" class="primary">Carpetas</button>
-    <button id="open">Abrir audio</button>
+    <button id="open">Abrir audio…</button>
     <span id="file" class="file"></span>
     <span class="spacer"></span>
     <button id="toggle-options">Ajustes</button>
@@ -102,43 +101,59 @@
     <button id="do-export" class="primary">Guardar archivo</button>
   </section>
 
-  <section id="progress" class="panel" hidden>
-    <div class="track"><div id="fill"></div></div>
-    <div class="row">
-      <span id="stage">preparando…</span>
-      <span class="spacer"></span>
-      <span id="eta"></span>
-      <button id="cancel">Detener</button>
-    </div>
-  </section>
+  <div id="work">
+    <!-- ------------------------------------------------ panel izquierdo -->
+    <aside id="side">
+      <div class="side-head">
+        <button id="br-up" title="Subir un nivel">↑</button>
+        <button id="br-home" title="Volver a la carpeta base">Base</button>
+        <span class="spacer"></span>
+        <button id="br-pick" title="Elegir otra carpeta base">Cambiar…</button>
+      </div>
+      <div id="br-path" class="side-path"></div>
 
-  <section id="browser" class="panel browser">
-    <div class="row">
-      <button id="br-up" title="Subir un nivel">↑</button>
-      <button id="br-home" title="Volver a la carpeta base">Base</button>
-      <span id="br-path" class="path"></span>
-      <span class="spacer"></span>
-      <button id="br-pick">Cambiar carpeta base</button>
-    </div>
-    <div id="br-folders" class="tiles"></div>
-    <div id="br-files" class="files"></div>
-    <div class="row">
-      <span id="br-info" class="hint"></span>
-      <span class="spacer"></span>
-      <button id="br-all" class="primary" disabled>Procesar todos</button>
-    </div>
-  </section>
+      <div class="side-label">Carpetas</div>
+      <div id="br-folders" class="list"></div>
 
-  <div id="queue" class="queue" hidden></div>
+      <div class="side-label">
+        Audios <span id="br-info"></span>
+      </div>
+      <div id="br-files" class="list grow"></div>
 
-  <main id="main">
-    <div id="empty" class="empty">
-      <h1>Elegí la carpeta del día</h1>
-      <p>o arrastrá un audio acá. Todo se procesa en esta computadora: nada sale a internet.</p>
-      <p class="hint">Clic en un bloque para copiarlo · doble clic para corregirlo · clic en la hora para saltar ahí</p>
-    </div>
-    <div id="segments"></div>
-  </main>
+      <div class="side-foot">
+        <button id="br-all" class="primary" disabled>Procesar todos</button>
+      </div>
+    </aside>
+
+    <div id="splitter" title="Arrastrá para cambiar el ancho"></div>
+
+    <!-- ------------------------------------------------- panel derecho -->
+    <section id="right">
+      <div id="job" class="job" hidden>
+        <div class="job-top">
+          <span class="dot pulse"></span>
+          <b id="job-name"></b>
+          <span id="job-stage"></span>
+          <span class="spacer"></span>
+          <span id="job-eta" class="dim"></span>
+          <button id="cancel">Detener</button>
+        </div>
+        <div class="track"><div id="fill"></div></div>
+      </div>
+
+      <div id="scroll">
+        <div id="empty" class="empty">
+          <h1>Elegí la carpeta del día</h1>
+          <p>Las carpetas están a la izquierda. También podés arrastrar un audio acá.</p>
+          <p class="hint">
+            Clic en un bloque para copiarlo · doble clic para corregirlo ·
+            clic en la hora para saltar ahí
+          </p>
+        </div>
+        <div id="segments"></div>
+      </div>
+    </section>
+  </div>
 
   <footer id="player" class="bar" hidden>
     <button id="back" title="Atrás 3 s (←)">◀◀</button>

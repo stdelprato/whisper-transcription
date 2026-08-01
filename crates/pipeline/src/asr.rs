@@ -33,6 +33,9 @@ pub struct Utterance {
     pub words: Vec<RawWord>,
     /// `false` cuando los tiempos se estimaron repartiendo el tramo (Canary).
     pub exact_timings: bool,
+    /// El modelo se fue por las ramas en este tramo. Se juzga sobre la salida cruda,
+    /// antes de limpiarla, porque después de limpiar parece un tramo corto cualquiera.
+    pub degenerate: bool,
 }
 
 pub struct Recognizer {
@@ -95,25 +98,47 @@ impl Recognizer {
             return Ok(Utterance::default());
         };
 
-        let text = res
+        let crudo = res
             .text
             .trim()
             .to_string();
-        if text.is_empty() {
+        if crudo.is_empty() {
             return Ok(Utterance::default());
         }
-
         let dur = samples.len() as f32 / sample_rate as f32;
-        match (&res.timestamps, &res.durations) {
-            (Some(ts), Some(ds)) if ts.len() == res.tokens.len() && !ts.is_empty() => Ok(Utterance {
-                words: words_from_tokens(&res.tokens, ts, ds),
+        // La degeneración se juzga sobre el texto crudo: si el modelo se fue por las ramas,
+        // hay que saberlo antes de limpiarlo, porque después parece un tramo corto y normal.
+        let degenerate = crate::confidence::is_degenerate(&crudo, dur);
+
+        // Fuera los tokens de control. El export de Canary a veces los escupe como texto.
+        let (tokens, ts, ds) = strip_control(&res);
+        let text = if tokens.is_empty() {
+            clean_text(&crudo)
+        } else {
+            text_from_tokens(&tokens)
+        };
+        if text
+            .trim()
+            .is_empty()
+        {
+            return Ok(Utterance {
+                degenerate,
+                ..Default::default()
+            });
+        }
+
+        match (ts, ds) {
+            (Some(ts), Some(ds)) if ts.len() == tokens.len() && !ts.is_empty() => Ok(Utterance {
+                words: words_from_tokens(&tokens, &ts, &ds),
                 text,
                 exact_timings: true,
+                degenerate,
             }),
             _ => Ok(Utterance {
                 words: words_spread(&text, dur),
                 text,
                 exact_timings: false,
+                degenerate,
             }),
         }
     }
@@ -121,6 +146,100 @@ impl Recognizer {
     pub fn model(&self) -> AsrModel {
         self.model
     }
+}
+
+/// ¿Es un token de control y no habla? `<|startofcontext|>`, `<|pnc|>`, `<unk>`...
+fn es_control(tok: &str) -> bool {
+    let t = tok.trim();
+    (t.starts_with("<|") && t.ends_with("|>"))
+        || matches!(t, "<unk>" | "<pad>" | "<s>" | "</s>" | "<blank>")
+}
+
+/// Saca los tokens de control y sus tiempos correspondientes.
+///
+/// El export de Canary a sherpa filtra sus marcas internas al texto, a veces cientos
+/// seguidas y sin espacios entre ellas. Sin esto acaban en la transcripción tal cual.
+fn strip_control(
+    res: &sherpa_onnx::OfflineRecognizerResult,
+) -> (Vec<String>, Option<Vec<f32>>, Option<Vec<f32>>) {
+    let alineado = |v: &Option<Vec<f32>>| {
+        v.as_ref()
+            .filter(|x| {
+                x.len()
+                    == res
+                        .tokens
+                        .len()
+            })
+            .cloned()
+    };
+    let ts = alineado(&res.timestamps);
+    let ds = alineado(&res.durations);
+
+    let mut tokens = Vec::with_capacity(
+        res.tokens
+            .len(),
+    );
+    let (mut nts, mut nds) = (Vec::new(), Vec::new());
+    for (i, tok) in res
+        .tokens
+        .iter()
+        .enumerate()
+    {
+        if es_control(tok) {
+            continue;
+        }
+        tokens.push(tok.clone());
+        if let Some(v) = &ts {
+            nts.push(v[i]);
+        }
+        if let Some(v) = &ds {
+            nds.push(v[i]);
+        }
+    }
+    (
+        tokens,
+        ts.map(|_| nts),
+        ds.map(|_| nds),
+    )
+}
+
+/// Quita las marcas `<|...|>` de un texto suelto, cuando no hay tokens con los que rehacerlo.
+fn clean_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut resto = text;
+    while let Some(a) = resto.find("<|") {
+        out.push_str(&resto[..a]);
+        match resto[a..].find("|>") {
+            Some(b) => resto = &resto[a + b + 2..],
+            None => {
+                resto = "";
+                break;
+            }
+        }
+    }
+    out.push_str(resto);
+    out.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Rehace el texto a partir de los tokens ya limpios.
+fn text_from_tokens(tokens: &[String]) -> String {
+    let mut out = String::new();
+    for tok in tokens {
+        let abre = tok.starts_with(' ') || tok.starts_with('\u{2581}');
+        let pieza = tok.replace('\u{2581}', " ");
+        let pieza = pieza.trim_start();
+        if pieza.is_empty() {
+            continue;
+        }
+        if abre && !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(pieza);
+    }
+    out.trim()
+        .to_string()
 }
 
 /// Une los tokens sub-palabra en palabras. Un token que empieza con espacio (Parakeet)

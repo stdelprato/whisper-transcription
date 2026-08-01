@@ -7,7 +7,7 @@ const $ = (id) => document.getElementById(id);
 const audio = new Audio();
 
 const state = {
-  /** cola de trabajo: {path, name, status: pendiente|procesando|listo|falló, transcript} */
+  /** cola de trabajo: {path, name, status, transcript, live, progreso} */
   queue: [],
   /** el archivo que se está viendo */
   shown: null,
@@ -18,6 +18,9 @@ const state = {
   startedAt: 0,
   duration: 0,
 };
+
+/** lo que muestra el panel izquierdo */
+const nav = { path: null, folders: [], audios: [] };
 
 /* ------------------------------------------------------------------ ayudas */
 
@@ -33,6 +36,7 @@ function esc(s) {
 }
 
 const nombre = (p) => p.split(/[\\/]/).pop();
+const tam = (b) => (b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`);
 
 let toastTimer;
 function toast(msg) {
@@ -43,7 +47,15 @@ function toast(msg) {
   toastTimer = setTimeout(() => (el.hidden = true), 1800);
 }
 
+const enCola = (path) => state.queue.find((x) => x.path === path);
+
 /* ------------------------------------------------------- ajustes y arranque */
+
+const PRESETS = {
+  fast: { asr: "parakeet", mt: "opus", verify: false, rtf: 0.64 },
+  balanced: { asr: "canary", mt: "opus", verify: true, rtf: 1.49 },
+  best: { asr: "canary", mt: "nllb", verify: true, rtf: 2.65 },
+};
 
 function readOptions() {
   const o = {
@@ -62,50 +74,39 @@ function readOptions() {
   return o;
 }
 
-/**
- * Los tres niveles. `rtf` es cuánto tarda por segundo de audio, medido en la máquina
- * de prueba; se reemplaza por lo que tarde de verdad en esta en cuanto haya datos.
- */
-const PRESETS = {
-  fast: { asr: "parakeet", mt: "opus", verify: false, rtf: 0.64 },
-  balanced: { asr: "canary", mt: "opus", verify: true, rtf: 1.49 },
-  best: { asr: "canary", mt: "nllb", verify: true, rtf: 2.65 },
-};
-
-/** Lo que tardó de verdad, por preset, guardado entre sesiones. */
-function rtfReal(nombre) {
+function rtfReal(n) {
   try {
-    const v = JSON.parse(localStorage.getItem("rtf") || "{}")[nombre];
+    const v = JSON.parse(localStorage.getItem("rtf") || "{}")[n];
     return typeof v === "number" && v > 0 ? v : null;
   } catch { return null; }
 }
 
-function anotarRtf(nombre, rtf) {
+function anotarRtf(n, rtf) {
   if (!(rtf > 0) || !isFinite(rtf)) return;
   try {
-    const todos = JSON.parse(localStorage.getItem("rtf") || "{}");
+    const t = JSON.parse(localStorage.getItem("rtf") || "{}");
     // Media móvil suave: una corrida rara no debería mover mucho la estimación.
-    todos[nombre] = todos[nombre] ? todos[nombre] * 0.7 + rtf * 0.3 : rtf;
-    localStorage.setItem("rtf", JSON.stringify(todos));
+    t[n] = t[n] ? t[n] * 0.7 + rtf * 0.3 : rtf;
+    localStorage.setItem("rtf", JSON.stringify(t));
   } catch { /* sin almacenamiento, no pasa nada */ }
 }
 
 function mostrarEstimacion() {
-  const nombre = $("o-preset").value;
-  const p = PRESETS[nombre];
-  const el = $("estimacion");
-  if (!p) { el.textContent = ""; return; }
-  const medido = rtfReal(nombre);
+  const n = $("o-preset").value;
+  const p = PRESETS[n];
+  if (!p) { $("estimacion").textContent = ""; return; }
+  const medido = rtfReal(n);
   const rtf = medido ?? p.rtf;
   const min = Math.round(rtf * 60);
-  el.textContent = `1 hora de audio ≈ ${min < 60 ? `${min} min` : `${(rtf).toFixed(1)} h`}`
-    + (medido ? " (medido acá)" : " (estimado)");
+  $("estimacion").textContent =
+    `1 hora de audio ≈ ${min < 90 ? `${min} min` : `${rtf.toFixed(1)} h`}` +
+    (medido ? " (medido acá)" : " (estimado)");
 }
 
 function syncPreset() {
-  const nombre = $("o-preset").value;
-  const custom = nombre === "custom";
-  const p = PRESETS[nombre];
+  const n = $("o-preset").value;
+  const custom = n === "custom";
+  const p = PRESETS[n];
   if (p) {
     $("o-asr").value = p.asr;
     $("o-mt").value = p.mt;
@@ -135,13 +136,7 @@ async function boot() {
   abrirCarpeta(null);
 }
 
-/* ------------------------------------------------------- explorador */
-
-const nav = { path: null, audios: [] };
-
-function tam(bytes) {
-  return bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`;
-}
+/* --------------------------------------------------- panel de carpetas */
 
 async function abrirCarpeta(path) {
   let l;
@@ -152,42 +147,69 @@ async function abrirCarpeta(path) {
     return;
   }
   nav.path = l.path;
+  nav.folders = l.folders;
   nav.audios = l.audios;
   $("br-path").textContent = l.path;
-
-  $("br-folders").innerHTML = l.folders.map((f) =>
-    `<div class="tile${f.workday ? " workday" : ""}" data-path="${esc(f.path)}">${esc(f.name)}</div>`
-  ).join("") || `<span class="hint">no hay subcarpetas acá</span>`;
-
-  $("br-files").innerHTML = l.audios.map((a) =>
-    `<div class="frow" data-path="${esc(a.path)}">
-       <span class="tick">${a.done ? "✓" : "&nbsp;"}</span>
-       <span>${esc(a.name)}</span>
-       <span class="sz">${tam(a.size)}</span>
-     </div>`
-  ).join("");
-
-  const n = l.total_audios;
-  const recortado = n > l.audios.length ? ` (se muestran los primeros ${l.audios.length})` : "";
-  const yaHechos = l.audios.filter((a) => a.done).length;
-  $("br-info").textContent = n
-    ? `${n} ${n === 1 ? "audio" : "audios"}${recortado}${yaHechos ? ` · ${yaHechos} ya procesados` : ""}`
-    : (l.has_workdays ? "elegí la carpeta del día" : "sin audios en esta carpeta");
-  $("br-all").disabled = !l.audios.some((a) => !a.done);
   $("br-up").disabled = !l.parent;
   $("br-up").dataset.path = l.parent ?? "";
+
+  $("br-folders").innerHTML = l.folders.length
+    ? l.folders.map((f) =>
+        `<div class="row ${f.workday ? "workday" : "otra"}" data-dir="${esc(f.path)}">
+           <span class="ico">${f.workday ? "★" : "▸"}</span>
+           <span class="nm">${esc(f.name)}</span>
+         </div>`).join("")
+    : `<div class="vacio">no hay subcarpetas</div>`;
+
+  pintarArchivos();
+}
+
+/** Dibuja la lista de audios con el estado de cada uno. */
+function pintarArchivos() {
+  const l = nav.audios;
+  $("br-files").innerHTML = l.length
+    ? l.map((a) => filaArchivo(a)).join("")
+    : `<div class="vacio">no hay audios en esta carpeta</div>`;
+
+  const hechos = l.filter((a) => a.done || enCola(a.path)?.status === "listo").length;
+  $("br-info").textContent = l.length ? `${hechos}/${l.length} listos` : "";
+  $("br-all").disabled = !l.some((a) => !a.done && !enCola(a.path));
+}
+
+function filaArchivo(a) {
+  const q = enCola(a.path);
+  const st = q?.status;
+  const listo = a.done || st === "listo";
+  const clases = ["row"];
+  let ico = "○";
+  if (st === "procesando") { clases.push("doing"); ico = "◐"; }
+  else if (listo) { clases.push("done"); ico = "✓"; }
+  else if (st === "falló") { clases.push("failed"); ico = "!"; }
+  if (a.path === state.shown) clases.push("sel");
+
+  const barra = st === "procesando"
+    ? `<div class="minitrack"><div class="minifill" style="width:${((q.progreso ?? 0) * 100).toFixed(0)}%"></div></div>`
+    : "";
+
+  return `<div class="${clases.join(" ")}" data-file="${esc(a.path)}">
+      <span class="ico">${ico}</span>
+      <span class="nm">${esc(a.name)}</span>
+      <span class="meta">${st === "procesando" ? "procesando" : tam(a.size)}</span>
+    </div>${barra}`;
 }
 
 $("br-folders").addEventListener("click", (e) => {
-  const t = e.target.closest(".tile");
-  if (t) abrirCarpeta(t.dataset.path);
+  const r = e.target.closest(".row");
+  if (r) abrirCarpeta(r.dataset.dir);
 });
 
 $("br-files").addEventListener("click", (e) => {
-  const r = e.target.closest(".frow");
+  const r = e.target.closest(".row");
   if (!r) return;
-  enqueue([r.dataset.path]);
-  $("browser").hidden = true;
+  const path = r.dataset.file;
+  const q = enCola(path);
+  if (q?.status === "listo") showFile(path);
+  else if (!q) enqueue([path]);
 });
 
 $("br-up").addEventListener("click", (e) => {
@@ -204,37 +226,57 @@ $("br-pick").addEventListener("click", async () => {
 });
 
 $("br-all").addEventListener("click", () => {
-  // Los que ya tienen transcripción se recuperan solos; no hace falta filtrarlos acá.
-  const pendientes = nav.audios.filter((a) => !a.done).map((a) => a.path);
-  if (!pendientes.length) return;
-  enqueue(pendientes);
-  $("browser").hidden = true;
+  const faltan = nav.audios.filter((a) => !a.done && !enCola(a.path)).map((a) => a.path);
+  if (faltan.length) enqueue(faltan);
 });
 
-$("toggle-browser").addEventListener("click", () => {
-  const oculto = $("browser").hidden;
-  $("browser").hidden = !oculto;
-  if (oculto) abrirCarpeta(nav.path);
-});
+/* ------------------------------------------------------------- separador */
+
+(function separador() {
+  const sp = $("splitter");
+  let arrastrando = false;
+  const mover = (x) => {
+    const ancho = Math.min(Math.max(x, 200), Math.min(560, window.innerWidth - 380));
+    document.documentElement.style.setProperty("--side", `${Math.round(ancho)}px`);
+  };
+  sp.addEventListener("mousedown", (e) => {
+    arrastrando = true;
+    sp.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => { if (arrastrando) mover(e.clientX); });
+  window.addEventListener("mouseup", () => {
+    if (!arrastrando) return;
+    arrastrando = false;
+    sp.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--side");
+    try { localStorage.setItem("side", v.trim()); } catch { /* da igual */ }
+  });
+  try {
+    const g = localStorage.getItem("side");
+    if (g) document.documentElement.style.setProperty("--side", g);
+  } catch { /* da igual */ }
+})();
 
 /* ------------------------------------------------------------------- cola */
 
 async function enqueue(paths) {
-  const nuevos = paths.filter((p) => !state.queue.some((q) => q.path === p));
+  const nuevos = paths.filter((p) => !enCola(p));
   if (!nuevos.length) return;
   for (const path of nuevos) {
-    // `live` acumula lo que va llegando mientras se procesa, para poder cambiar de
-    // archivo y volver sin perder lo que ya se veía.
-    state.queue.push({ path, name: nombre(path), status: "pendiente", transcript: null, live: [] });
+    // `live` acumula lo que llega mientras se procesa, para poder cambiar de archivo
+    // y volver sin perder lo que ya se veía.
+    state.queue.push({ path, name: nombre(path), status: "pendiente", transcript: null, live: [], progreso: 0 });
   }
-  drawQueue();
 
   // Si un audio ya se procesó antes, se recupera en vez de repetirlo.
   let recuperados = 0;
   for (const path of nuevos) {
     const previo = await invoke("load_result", { path }).catch(() => null);
     if (!previo) continue;
-    const f = state.queue.find((x) => x.path === path);
+    const f = enCola(path);
     f.status = "listo";
     f.transcript = previo;
     f.live = previo.segments;
@@ -242,52 +284,34 @@ async function enqueue(paths) {
   }
   if (recuperados) toast(`${recuperados} ${recuperados === 1 ? "audio ya estaba" : "audios ya estaban"} procesados`);
 
-  drawQueue();
+  pintarArchivos();
   if (!state.shown) showFile(nuevos[0]);
   processNext();
 }
 
-function drawQueue() {
-  const q = $("queue");
-  q.hidden = state.queue.length < 1;
-  q.innerHTML = state.queue.map((f) => {
-    const clases = ["chip"];
-    if (f.status === "listo") clases.push("done");
-    else if (f.status === "falló") clases.push("failed");
-    if (f.path === state.busy || f.path === state.shown) clases.push("current");
-    return `<span class="${clases.join(" ")}" data-path="${esc(f.path)}">
-      <span class="dot"></span>${esc(f.name)}</span>`;
-  }).join("");
-}
-
-$("queue").addEventListener("click", (e) => {
-  const chip = e.target.closest(".chip");
-  if (!chip) return;
-  const f = state.queue.find((x) => x.path === chip.dataset.path);
-  if (f && f.status === "listo") showFile(f.path);
-});
-
 async function processNext() {
   if (state.busy) return;
   const f = state.queue.find((x) => x.status === "pendiente");
-  if (!f) return;
+  if (!f) { $("job").hidden = true; return; }
   state.busy = f.path;
   f.status = "procesando";
-  drawQueue();
-  if (!state.shown) showFile(f.path);
+  f.progreso = 0;
+  if (!state.shown || enCola(state.shown)?.status !== "listo") showFile(f.path);
+  pintarArchivos();
 
   state.startedAt = Date.now();
-  $("progress").hidden = false;
+  $("job").hidden = false;
+  $("job-name").textContent = f.name;
+  $("job-stage").textContent = "abriendo…";
+  $("job-eta").textContent = "";
   $("fill").style.width = "0%";
-  $("stage").textContent = `abriendo ${f.name}…`;
-  $("eta").textContent = "";
+
   try {
     await invoke("start", { path: f.path, opts: readOptions() });
   } catch (e) {
     f.status = "falló";
     state.busy = null;
-    $("progress").hidden = true;
-    drawQueue();
+    pintarArchivos();
     toast(String(e));
     processNext();
   }
@@ -296,17 +320,15 @@ async function processNext() {
 /* --------------------------------------------------- mostrar un archivo */
 
 async function showFile(path) {
-  const f = state.queue.find((x) => x.path === path);
-  if (!f) return;
+  const f = enCola(path);
   state.shown = path;
   state.active = -1;
-  state.segments = f.transcript ? f.transcript.segments : f.live;
-  $("file").textContent = f.name;
-  $("empty").hidden = true;
+  state.segments = f ? (f.transcript ? f.transcript.segments : f.live) : [];
+  $("file").textContent = nombre(path);
   drawAll();
-  drawQueue();
-  $("toggle-export").disabled = !f.transcript;
-  if (f.transcript) await invoke("set_transcript", { transcript: f.transcript });
+  pintarArchivos();
+  $("toggle-export").disabled = !f?.transcript;
+  if (f?.transcript) await invoke("set_transcript", { transcript: f.transcript });
 
   try {
     const playable = await invoke("prepare_playback", { path });
@@ -323,17 +345,23 @@ async function showFile(path) {
 const PESO = { asr: 0.55, verify: 0.2, mt: 0.25 };
 
 function setProgress(frac, texto) {
+  const f = enCola(state.busy);
+  if (f) {
+    f.progreso = frac;
+    const fila = $("br-files").querySelector(`[data-file="${CSS.escape(f.path)}"]`);
+    const barra = fila?.nextElementSibling?.querySelector(".minifill");
+    if (barra) barra.style.width = `${(frac * 100).toFixed(0)}%`;
+  }
   $("fill").style.width = (Math.min(1, Math.max(0, frac)) * 100).toFixed(1) + "%";
-  $("stage").textContent = texto;
+  $("job-stage").textContent = texto;
   const t = (Date.now() - state.startedAt) / 1000;
-  $("eta").textContent = frac > 0.05 && frac < 1 ? "faltan ~" + fmt(t / frac - t) : "";
+  $("job-eta").textContent = frac > 0.05 && frac < 1 ? "faltan ~" + fmt(t / frac - t) : "";
 }
 
 listen("progress", (ev) => {
   const p = ev.payload;
-  const f = state.queue.find((x) => x.path === state.busy);
+  const f = enCola(state.busy);
   if (!f) return;
-  // Los bloques se acumulan siempre; se dibujan solo si es el archivo que se está mirando.
   const mirando = state.shown === state.busy;
 
   switch (p.kind) {
@@ -363,10 +391,7 @@ listen("progress", (ev) => {
       break;
     case "translated": {
       const seg = f.live.find((s) => s.id === p.id);
-      if (seg) {
-        seg.target = p.text;
-        if (mirando) render(seg);
-      }
+      if (seg) { seg.target = p.text; if (mirando) render(seg); }
       const hechos = f.live.filter((s) => s.target != null).length;
       setProgress(0.8 + PESO.mt * (hechos / Math.max(1, f.live.length)),
         `traduciendo ${hechos} de ${f.live.length}`);
@@ -377,15 +402,17 @@ listen("progress", (ev) => {
 
 listen("finished", async (ev) => {
   const t = ev.payload;
-  const f = state.queue.find((x) => x.path === state.busy);
-  if (f) { f.status = "listo"; f.transcript = t; f.live = t.segments; }
+  const f = enCola(state.busy);
+  if (f) { f.status = "listo"; f.transcript = t; f.live = t.segments; f.progreso = 1; }
   state.busy = null;
   if (!t.cancelled && t.duration > 0) {
     anotarRtf($("o-preset").value, t.timings.total / t.duration);
     mostrarEstimacion();
   }
-  $("progress").hidden = true;
-  drawQueue();
+  // Refresca la lista para que el audio recién hecho salga con su tilde.
+  const a = nav.audios.find((x) => x.path === f?.path);
+  if (a) a.done = true;
+  pintarArchivos();
 
   if (!f || state.shown === f.path) {
     state.segments = t.segments;
@@ -401,25 +428,21 @@ listen("finished", async (ev) => {
 });
 
 listen("failed", (ev) => {
-  const f = state.queue.find((x) => x.path === state.busy);
+  const f = enCola(state.busy);
   if (f) f.status = "falló";
   state.busy = null;
-  $("progress").hidden = true;
-  drawQueue();
+  pintarArchivos();
   toast("Falló: " + ev.payload);
   processNext();
 });
 
 /* --------------------------------------------------------------- bloques */
 
-function nodeFor(id) {
-  return $("segments").querySelector(`[data-id="${id}"]`);
-}
+const nodeFor = (id) => $("segments").querySelector(`[data-id="${id}"]`);
 
 /** El nombre que le pusieron al hablante, o "Hablante N". */
 function nombreHablante(k) {
-  const f = state.queue.find((x) => x.path === state.shown);
-  const puesto = f?.transcript?.speaker_names?.[k];
+  const puesto = enCola(state.shown)?.transcript?.speaker_names?.[k];
   return puesto && puesto.trim() ? puesto : `Hablante ${k + 1}`;
 }
 
@@ -481,8 +504,7 @@ function render(seg) {
 }
 
 function drawAll() {
-  const cont = $("segments");
-  cont.replaceChildren(...state.segments.map(articleFor));
+  $("segments").replaceChildren(...state.segments.map(articleFor));
   $("empty").hidden = state.segments.length > 0;
 }
 
@@ -531,6 +553,33 @@ function editar(el, seg) {
   });
 }
 
+/** Cambia "Hablante 2" por el nombre que quiera, en todos los bloques de esa persona. */
+function renombrarHablante(chip) {
+  const k = +chip.dataset.spk;
+  const f = enCola(state.shown);
+  if (!f?.transcript) return;
+  chip.contentEditable = "true";
+  chip.focus();
+  document.execCommand?.("selectAll", false, null);
+
+  const terminar = async () => {
+    chip.contentEditable = "false";
+    const nom = chip.textContent.trim();
+    const names = f.transcript.speaker_names ?? (f.transcript.speaker_names = []);
+    while (names.length <= k) names.push("");
+    names[k] = nom === `Hablante ${k + 1}` ? "" : nom;
+    try {
+      await invoke("set_transcript", { transcript: f.transcript });
+      await invoke("set_speaker_name", { index: k, name: names[k] });
+    } catch (e) { toast(String(e)); }
+    drawAll();
+  };
+  chip.addEventListener("blur", terminar, { once: true });
+  chip.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === "Escape") { ev.preventDefault(); chip.blur(); }
+  });
+}
+
 // Un clic copia, dos corrigen. Se espera un instante para no copiar al ir a corregir.
 let clicPendiente;
 
@@ -557,33 +606,6 @@ $("segments").addEventListener("dblclick", (e) => {
   const seg = state.segments.find((s) => s.id === +el.dataset.id);
   if (seg) editar(el, seg);
 });
-
-/** Cambia "Hablante 2" por el nombre que quiera, en todos los bloques de esa persona. */
-function renombrarHablante(chip) {
-  const k = +chip.dataset.spk;
-  const f = state.queue.find((x) => x.path === state.shown);
-  if (!f?.transcript) return;
-  chip.contentEditable = "true";
-  chip.focus();
-  document.execCommand?.("selectAll", false, null);
-
-  const terminar = async () => {
-    chip.contentEditable = "false";
-    const nombre = chip.textContent.trim();
-    const names = f.transcript.speaker_names ?? (f.transcript.speaker_names = []);
-    while (names.length <= k) names.push("");
-    names[k] = nombre === `Hablante ${k + 1}` ? "" : nombre;
-    try {
-      await invoke("set_transcript", { transcript: f.transcript });
-      await invoke("set_speaker_name", { index: k, name: names[k] });
-    } catch (e) { toast(String(e)); }
-    drawAll();
-  };
-  chip.addEventListener("blur", terminar, { once: true });
-  chip.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter" || ev.key === "Escape") { ev.preventDefault(); chip.blur(); }
-  });
-}
 
 /* ------------------------------------------------------------ reproductor */
 
@@ -651,12 +673,12 @@ document.addEventListener("keydown", (e) => {
 
 $("open").addEventListener("click", async () => {
   const paths = await invoke("pick_audio", { from: nav.path });
-  if (paths?.length) { enqueue(paths); $("browser").hidden = true; }
+  if (paths?.length) enqueue(paths);
 });
 
 $("cancel").addEventListener("click", () => {
   invoke("cancel");
-  $("stage").textContent = "deteniendo…";
+  $("job-stage").textContent = "deteniendo…";
 });
 
 $("toggle-options").addEventListener("click", () => ($("options").hidden = !$("options").hidden));
@@ -665,7 +687,7 @@ $("o-preset").addEventListener("change", syncPreset);
 $("o-lang").addEventListener("change", syncPreset);
 
 $("o-speakers").addEventListener("change", async () => {
-  const f = state.queue.find((x) => x.path === state.shown);
+  const f = enCola(state.shown);
   if (!f?.transcript || state.busy) return;
   toast("separando hablantes de nuevo…");
   try {

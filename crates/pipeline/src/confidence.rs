@@ -212,6 +212,52 @@ pub fn loop_score(text: &str, n: usize) -> usize {
 /// Umbral a partir del cual damos un tramo por degenerado.
 pub const LOOP_LIMIT: usize = 6;
 
+/// Nadie habla a más de esto. Sirve para cazar cualquier desbarre, se repita lo que se repita.
+const CHARS_POR_SEGUNDO: f32 = 32.0;
+
+/// ¿El modelo se fue por las ramas en este tramo?
+///
+/// Hay tres formas de darse cuenta, y hacen falta las tres. La primera versión solo
+/// contaba repeticiones de 4-gramas de palabras, y se le escapó el caso peor: Canary
+/// escupió trescientos tokens de control **pegados sin espacios**, así que para
+/// `split_whitespace` era una única palabra y no había ningún 4-grama que contar. El
+/// tramo pasó por bueno y no se reparó, con Parakeet teniendo la frase correcta al lado.
+pub fn is_degenerate(text: &str, secs: f32) -> bool {
+    let n_chars = text
+        .chars()
+        .count();
+    if n_chars < 40 {
+        return false;
+    }
+    // 1) demasiado texto para el tiempo que dura el audio
+    if secs >= 1.0 && n_chars as f32 / secs > CHARS_POR_SEGUNDO {
+        return true;
+    }
+    // 2) la misma frase una y otra vez
+    if loop_score(text, 4) >= LOOP_LIMIT {
+        return true;
+    }
+    // 3) el mismo trozo repetido sin espacios de por medio
+    repetitivo_por_caracteres(text)
+}
+
+/// Mira cuánta variedad hay en el texto a nivel de caracteres. Un texto sano tiene muchos
+/// trozos distintos; uno que repite lo mismo, poquísimos.
+fn repetitivo_por_caracteres(text: &str) -> bool {
+    const VENTANA: usize = 12;
+    let chars: Vec<char> = text
+        .chars()
+        .collect();
+    if chars.len() < VENTANA * 4 {
+        return false;
+    }
+    let total = chars.len() - VENTANA + 1;
+    let distintos: std::collections::HashSet<&[char]> = chars
+        .windows(VENTANA)
+        .collect();
+    (distintos.len() as f32 / total as f32) < 0.2
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,5 +370,53 @@ mod tests {
         assert!(loop_score(sano, 4) < LOOP_LIMIT);
         let roto = "gracias por ver el video ".repeat(20);
         assert!(loop_score(&roto, 4) >= LOOP_LIMIT);
+    }
+
+    #[test]
+    fn el_habla_normal_no_se_marca() {
+        for (t, s) in [
+            (
+                "hoy vamos a revisar el expediente antes de la audiencia del martes",
+                5.0,
+            ),
+            ("si te llegan a decir que se suicidó en la celda no pasa nada", 4.0),
+            (
+                "ahorita por el proceso estoy solo pero pues es tarde que temprano \
+                 que me van a mandar donde están todos y ahí sí voy a saber lo que es bueno",
+                10.0,
+            ),
+            ("no, no, no, no quiero que venga a verme", 3.0),
+        ] {
+            assert!(!is_degenerate(t, s), "no debería marcarse: {t}");
+        }
+    }
+
+    #[test]
+    fn caza_los_tokens_de_control_pegados() {
+        // El caso real: trescientas marcas sin un solo espacio de por medio.
+        let roto = "de".to_string() + &"<|startofcontext|>".repeat(30);
+        assert_eq!(
+            roto.split_whitespace()
+                .count(),
+            1,
+            "el caso es justamente que es una sola palabra"
+        );
+        assert_eq!(loop_score(&roto, 4), 0, "por eso el contador de 4-gramas no lo veía");
+        assert!(is_degenerate(&roto, 3.0), "pero sí tiene que marcarse");
+    }
+
+    #[test]
+    fn caza_el_texto_imposible_para_el_tiempo() {
+        // 74 veces "no" en cinco segundos: nadie habla así.
+        let roto = "si te llegan a decir que lo descuartizaron no pasa nada, ".to_string()
+            + &"no, ".repeat(74);
+        assert!(is_degenerate(&roto, 5.4));
+    }
+
+    #[test]
+    fn un_tramo_corto_nunca_es_degenerado() {
+        assert!(!is_degenerate("Mm.", 0.7));
+        assert!(!is_degenerate("¿Qué onda?", 1.2));
+        assert!(!is_degenerate("Sí, dale.", 0.9));
     }
 }

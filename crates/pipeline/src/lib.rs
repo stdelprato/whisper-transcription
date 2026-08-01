@@ -31,7 +31,6 @@ pub use models::{AsrModel, Models, MtModel};
 
 use crate::asr::{RawWord, Recognizer, Utterance};
 use crate::audio::Audio;
-use crate::confidence::LOOP_LIMIT;
 use crate::denoise::Denoiser;
 use crate::diarize::{DiarOptions, SpeakerSpan};
 use crate::translate::{Mt, MtOptions};
@@ -556,7 +555,7 @@ fn transcribe_pass(
             start,
             end,
             speaker: diarize::speaker_at(speaker_spans, start, end),
-            degenerate: confidence::loop_score(&utt.text, 4) >= LOOP_LIMIT,
+            degenerate: utt.degenerate,
             source: utt.text,
             target: None,
             words,
@@ -607,6 +606,11 @@ fn merge_verification(
         seg.alt_source = Some(String::new());
         return;
     }
+    if other.degenerate {
+        // El de contraste también desbarró: no sirve ni para marcar ni para rescatar.
+        seg.alt_source = Some(other.text);
+        return;
+    }
 
     let reference: Vec<RawWord> = other
         .words
@@ -635,8 +639,7 @@ fn merge_verification(
     let cmp = confidence::compare(&primary, &reference);
     seg.agreement = Some(cmp.agreement);
 
-    let other_degenerate = confidence::loop_score(&other.text, 4) >= LOOP_LIMIT;
-    if seg.degenerate && !other_degenerate {
+    if seg.degenerate {
         let roto = std::mem::replace(&mut seg.source, other.text);
         seg.alt_source = Some(roto);
         seg.words = reference
