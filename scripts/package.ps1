@@ -76,6 +76,7 @@ if ($SinModelos) {
 
 $primerPaso = if ($SinModelos) {
 @"
+
 ANTES DE EMPEZAR, UNA SOLA VEZ
 ------------------------------
 Doble clic en "Descargar modelos.bat" y dejalo terminar. Baja unos 3,2 GB
