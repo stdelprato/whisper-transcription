@@ -1,0 +1,29 @@
+[package]
+name = "transcriptor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Transcripción y traducción de audio, en local"
+
+[lib]
+name = "transcriptor_lib"
+crate-type = ["lib"]
+
+[[bin]]
+name = "transcriptor"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+pipeline = { path = "../crates/pipeline" }
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[features]
+default = []

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transcriptor</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="bar">
+    <button id="open" class="primary">Abrir audio</button>
+    <span id="file" class="file"></span>
+    <span class="spacer"></span>
+    <button id="toggle-options">Ajustes</button>
+    <button id="toggle-export" disabled>Exportar</button>
+  </header>
+
+  <section id="options" class="panel" hidden>
+    <div class="grid">
+      <label>Idioma del audio
+        <select id="o-lang">
+          <option value="es" selected>Español → inglés</option>
+          <option value="en">Inglés (solo transcribir)</option>
+        </select>
+      </label>
+
+      <label>Calidad
+        <select id="o-preset">
+          <option value="balanced" selected>Equilibrada — recomendada</option>
+          <option value="fast">Rápida — un solo modelo</option>
+          <option value="best">Máxima — tarda unas 4 veces más</option>
+          <option value="custom">A medida</option>
+        </select>
+        <small id="estimacion" class="est"></small>
+      </label>
+
+      <label class="custom-only">Reconocimiento
+        <select id="o-asr">
+          <option value="canary" selected>Canary 1B v2</option>
+          <option value="parakeet">Parakeet TDT 0.6B</option>
+        </select>
+      </label>
+
+      <label class="custom-only">Traducción
+        <select id="o-mt">
+          <option value="nllb" selected>NLLB-200 600M</option>
+          <option value="opus">opus-mt es→en</option>
+          <option value="none">Ninguna</option>
+        </select>
+      </label>
+
+      <label>Hablantes
+        <select id="o-speakers">
+          <option value="0">Detectar solo</option>
+          <option value="1">1</option>
+          <option value="2" selected>2 (llamada)</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+        </select>
+      </label>
+
+      <label>Núcleos
+        <input id="o-threads" type="number" min="1" max="16" value="4" />
+      </label>
+    </div>
+
+    <div class="checks">
+      <label title="Contrasta con el otro modelo: marca las palabras dudosas y rescata los tramos que se enganchan repitiendo.">
+        <input id="o-verify" type="checkbox" checked /> Contrastar con el segundo modelo
+      </label>
+      <label title="Ayuda en algunas grabaciones y arruina otras. Probalo y compará.">
+        <input id="o-denoise" type="checkbox" /> Limpiar ruido antes de reconocer
+      </label>
+      <label>
+        <input id="o-diarize" type="checkbox" checked /> Separar hablantes
+      </label>
+    </div>
+    <p id="warn" class="warn" hidden></p>
+  </section>
+
+  <section id="export" class="panel" hidden>
+    <div class="grid">
+      <label>Formato
+        <select id="e-format">
+          <option value="rtf" selected>Word (.rtf)</option>
+          <option value="txt">Texto (.txt)</option>
+          <option value="srt">Subtítulos (.srt)</option>
+        </select>
+      </label>
+      <label>Contenido
+        <select id="e-content">
+          <option value="target" selected>Solo inglés</option>
+          <option value="both">Inglés y español</option>
+          <option value="source">Solo español</option>
+        </select>
+      </label>
+      <label class="inline"><input id="e-speakers" type="checkbox" checked /> Incluir hablantes</label>
+    </div>
+    <button id="do-export" class="primary">Guardar archivo</button>
+  </section>
+
+  <section id="progress" class="panel" hidden>
+    <div class="track"><div id="fill"></div></div>
+    <div class="row">
+      <span id="stage">preparando…</span>
+      <span class="spacer"></span>
+      <span id="eta"></span>
+      <button id="cancel">Detener</button>
+    </div>
+  </section>
+
+  <div id="queue" class="queue" hidden></div>
+
+  <main id="main">
+    <div id="empty" class="empty">
+      <h1>Arrastrá un audio acá</h1>
+      <p>o usá <b>Abrir audio</b>. Todo se procesa en esta computadora: nada sale a internet.</p>
+      <p class="hint">Clic en un bloque para copiarlo · doble clic para corregirlo · clic en la hora para saltar ahí</p>
+    </div>
+    <div id="segments"></div>
+  </main>
+
+  <footer id="player" class="bar" hidden>
+    <button id="back" title="Atrás 3 s (←)">◀◀</button>
+    <button id="play" class="primary" title="Reproducir / pausar (espacio)">▶</button>
+    <button id="fwd" title="Adelante 3 s (→)">▶▶</button>
+    <input id="seek" type="range" min="0" max="1000" value="0" />
+    <span id="time" class="time">0:00 / 0:00</span>
+    <label class="rate">
+      <input id="rate" type="range" min="50" max="150" step="5" value="100" />
+      <span id="rate-label">1.00×</span>
+    </label>
+    <label class="inline" title="Repite el bloque actual hasta que lo apagues"><input id="loopseg" type="checkbox" /> Bucle</label>
+    <label class="inline" title="Desplaza la lista siguiendo el audio"><input id="follow" type="checkbox" checked /> Seguir</label>
+  </footer>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -26,3 +26,20 @@ repopack*
 
 # Ignore .DS_Store files (for macOS users)
 .DS_Store
+# --- app nueva (Rust/Tauri) ---
+target/
+models/
+node_modules/
+dist/
+*.wav
+!crates/pipeline/testdata/*.wav
+
+# resultados que la app guarda junto a cada audio
+*.transcripcion.json
+
+# audios de prueba: son grabaciones de personas reales, no van al repo
+test_call_*.mp3
+audios/
+
+# lo genera tauri-build en cada compilacion
+src-tauri/gen/
