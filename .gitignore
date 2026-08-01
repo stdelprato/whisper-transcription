@@ -43,3 +43,6 @@ audios/
 
 # lo genera tauri-build en cada compilacion
 src-tauri/gen/
+
+# binarios que baja setup.ps1 (ffmpeg, cmake): no son parte del repo
+tools/

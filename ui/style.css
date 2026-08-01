@@ -138,6 +138,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   min-height: 0;
   display: grid;
   grid-template-columns: var(--side) 6px 1fr;
+  overflow: hidden;
 }
 
 #splitter {
@@ -209,6 +210,22 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .row.workday .ico { color: var(--accent); }
 .row.otra { color: var(--dim); }
 
+/* Rehacer está a un clic pero no molesta: aparece al pasar por encima. */
+.row .redo {
+  flex: none;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  color: #6d768c;
+  font-size: 14px;
+  line-height: 1.1;
+  opacity: 0;
+}
+
+.row:hover .redo, .row.sel .redo { opacity: 1; }
+.row .redo:hover { background: none; color: var(--accent); }
+
 .row.done .ico { color: var(--ok); }
 .row.doing { background: #2b2419; }
 .row.doing .ico { color: var(--accent); }
@@ -222,7 +239,10 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .vacio { padding: 8px 9px; font-size: 12.5px; color: #6d768c; }
 
 /* ---------- panel derecho ---------- */
-#right { display: flex; flex-direction: column; min-width: 0; }
+/* `min-height: 0` no es un detalle: sin eso el alto mínimo de esta celda lo fija su
+   contenido, la fila crece más que la ventana y #scroll nunca llega a desbordar,
+   así que no aparece la barra y la lista queda cortada abajo. */
+#right { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 
 .job {
   flex: none;

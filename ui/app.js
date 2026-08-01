@@ -171,7 +171,9 @@ function pintarArchivos() {
     ? l.map((a) => filaArchivo(a)).join("")
     : `<div class="vacio">no hay audios en esta carpeta</div>`;
 
-  const hechos = l.filter((a) => a.done || enCola(a.path)?.status === "listo").length;
+  // Lo que dice la cola manda sobre lo que había en disco: si se está rehaciendo
+  // uno que ya estaba, todavía no está listo.
+  const hechos = l.filter((a) => { const q = enCola(a.path); return q ? q.status === "listo" : a.done; }).length;
   $("br-info").textContent = l.length ? `${hechos}/${l.length} listos` : "";
   $("br-all").disabled = !l.some((a) => !a.done && !enCola(a.path));
 }
@@ -179,12 +181,16 @@ function pintarArchivos() {
 function filaArchivo(a) {
   const q = enCola(a.path);
   const st = q?.status;
-  const listo = a.done || st === "listo";
   const clases = ["row"];
   let ico = "○";
-  if (st === "procesando") { clases.push("doing"); ico = "◐"; }
-  else if (listo) { clases.push("done"); ico = "✓"; }
-  else if (st === "falló") { clases.push("failed"); ico = "!"; }
+  let meta = tam(a.size);
+  let rehacer = false;
+
+  if (st === "procesando") { clases.push("doing"); ico = "◐"; meta = "procesando"; }
+  else if (st === "pendiente") { ico = "·"; meta = "en cola"; }
+  else if (st === "detenido") { clases.push("failed"); ico = "!"; meta = "detenido"; rehacer = true; }
+  else if (st === "falló") { clases.push("failed"); ico = "!"; meta = "falló"; rehacer = true; }
+  else if (st === "listo" || a.done) { clases.push("done"); ico = "✓"; rehacer = true; }
   if (a.path === state.shown) clases.push("sel");
 
   const barra = st === "procesando"
@@ -194,7 +200,8 @@ function filaArchivo(a) {
   return `<div class="${clases.join(" ")}" data-file="${esc(a.path)}">
       <span class="ico">${ico}</span>
       <span class="nm">${esc(a.name)}</span>
-      <span class="meta">${st === "procesando" ? "procesando" : tam(a.size)}</span>
+      <span class="meta">${meta}</span>
+      ${rehacer ? `<button class="redo" title="Procesar de nuevo">↻</button>` : ""}
     </div>${barra}`;
 }
 
@@ -207,9 +214,9 @@ $("br-files").addEventListener("click", (e) => {
   const r = e.target.closest(".row");
   if (!r) return;
   const path = r.dataset.file;
-  const q = enCola(path);
-  if (q?.status === "listo") showFile(path);
-  else if (!q) enqueue([path]);
+  if (e.target.closest(".redo")) { enqueue([path], true); return; }
+  if (enCola(path)) showFile(path);
+  else enqueue([path]);
 });
 
 $("br-up").addEventListener("click", (e) => {
@@ -262,30 +269,48 @@ $("br-all").addEventListener("click", () => {
 
 /* ------------------------------------------------------------------- cola */
 
-async function enqueue(paths) {
-  const nuevos = paths.filter((p) => !enCola(p));
-  if (!nuevos.length) return;
-  for (const path of nuevos) {
-    // `live` acumula lo que llega mientras se procesa, para poder cambiar de archivo
-    // y volver sin perder lo que ya se veía.
-    state.queue.push({ path, name: nombre(path), status: "pendiente", transcript: null, live: [], progreso: 0 });
+/**
+ * Mete audios en la cola. Con `rehacer` se procesan de cero aunque ya tengan
+ * resultado guardado: es la única forma de volver a correr uno con otros ajustes.
+ */
+async function enqueue(paths, rehacer = false) {
+  const nuevos = [];
+  for (const path of paths) {
+    const f = enCola(path);
+    if (f) {
+      // El que se está procesando ahora no se toca; lo demás vuelve a foja cero.
+      if (!rehacer || path === state.busy) continue;
+      // `live` acumula lo que llega mientras se procesa, para poder cambiar de archivo
+      // y volver sin perder lo que ya se veía.
+      Object.assign(f, { status: "pendiente", transcript: null, live: [], progreso: 0 });
+    } else {
+      state.queue.push({ path, name: nombre(path), status: "pendiente", transcript: null, live: [], progreso: 0 });
+    }
+    nuevos.push(path);
+  }
+
+  if (!nuevos.length) {
+    if (paths.length === 1) showFile(paths[0]); // ya estaba en la cola: al menos mostralo
+    return;
   }
 
   // Si un audio ya se procesó antes, se recupera en vez de repetirlo.
   let recuperados = 0;
-  for (const path of nuevos) {
-    const previo = await invoke("load_result", { path }).catch(() => null);
-    if (!previo) continue;
-    const f = enCola(path);
-    f.status = "listo";
-    f.transcript = previo;
-    f.live = previo.segments;
-    recuperados++;
+  if (!rehacer) {
+    for (const path of nuevos) {
+      const previo = await invoke("load_result", { path }).catch(() => null);
+      if (!previo || previo.cancelled) continue;
+      const f = enCola(path);
+      f.status = "listo";
+      f.transcript = previo;
+      f.live = previo.segments;
+      recuperados++;
+    }
+    if (recuperados) toast(`${recuperados} ${recuperados === 1 ? "audio ya estaba" : "audios ya estaban"} procesados`);
   }
-  if (recuperados) toast(`${recuperados} ${recuperados === 1 ? "audio ya estaba" : "audios ya estaban"} procesados`);
 
   pintarArchivos();
-  if (!state.shown) showFile(nuevos[0]);
+  if (rehacer || !state.shown) await showFile(nuevos[0]);
   processNext();
 }
 
@@ -298,6 +323,7 @@ async function processNext() {
   f.progreso = 0;
   if (!state.shown || enCola(state.shown)?.status !== "listo") showFile(f.path);
   pintarArchivos();
+  actualizarRehacer();
 
   state.startedAt = Date.now();
   $("job").hidden = false;
@@ -319,6 +345,13 @@ async function processNext() {
 
 /* --------------------------------------------------- mostrar un archivo */
 
+/** El botón de arriba sirve para el audio que se está mirando, salvo que sea el que corre. */
+function actualizarRehacer() {
+  const b = $("redo");
+  b.hidden = !state.shown;
+  b.disabled = state.shown === state.busy;
+}
+
 async function showFile(path) {
   const f = enCola(path);
   state.shown = path;
@@ -328,6 +361,7 @@ async function showFile(path) {
   drawAll();
   pintarArchivos();
   $("toggle-export").disabled = !f?.transcript;
+  actualizarRehacer();
   if (f?.transcript) await invoke("set_transcript", { transcript: f.transcript });
 
   try {
@@ -403,7 +437,14 @@ listen("progress", (ev) => {
 listen("finished", async (ev) => {
   const t = ev.payload;
   const f = enCola(state.busy);
-  if (f) { f.status = "listo"; f.transcript = t; f.live = t.segments; f.progreso = 1; }
+  // Un audio detenido a mitad NO es un audio hecho: queda a la vista, se puede exportar
+  // lo que haya, pero no lleva tilde ni cuenta como listo.
+  if (f) {
+    f.status = t.cancelled ? "detenido" : "listo";
+    f.transcript = t;
+    f.live = t.segments;
+    f.progreso = 1;
+  }
   state.busy = null;
   if (!t.cancelled && t.duration > 0) {
     anotarRtf($("o-preset").value, t.timings.total / t.duration);
@@ -411,8 +452,9 @@ listen("finished", async (ev) => {
   }
   // Refresca la lista para que el audio recién hecho salga con su tilde.
   const a = nav.audios.find((x) => x.path === f?.path);
-  if (a) a.done = true;
+  if (a && !t.cancelled) a.done = true;
   pintarArchivos();
+  actualizarRehacer();
 
   if (!f || state.shown === f.path) {
     state.segments = t.segments;
@@ -432,6 +474,7 @@ listen("failed", (ev) => {
   if (f) f.status = "falló";
   state.busy = null;
   pintarArchivos();
+  actualizarRehacer();
   toast("Falló: " + ev.payload);
   processNext();
 });
@@ -627,6 +670,12 @@ $("rate").addEventListener("input", (e) => {
 audio.addEventListener("play", () => ($("play").textContent = "❚❚"));
 audio.addEventListener("pause", () => ($("play").textContent = "▶"));
 
+// Sin esto el reloj dice 0:00 / 0:00 hasta que le dan play, y parece que no cargó.
+audio.addEventListener("loadedmetadata", () => {
+  $("time").textContent = `${fmt(audio.currentTime)} / ${fmt(audio.duration)}`;
+  $("seek").value = 0;
+});
+
 audio.addEventListener("timeupdate", () => {
   const t = audio.currentTime;
   const d = audio.duration || state.duration || 0;
@@ -679,6 +728,10 @@ $("open").addEventListener("click", async () => {
 $("cancel").addEventListener("click", () => {
   invoke("cancel");
   $("job-stage").textContent = "deteniendo…";
+});
+
+$("redo").addEventListener("click", () => {
+  if (state.shown && state.shown !== state.busy) enqueue([state.shown], true);
 });
 
 $("toggle-options").addEventListener("click", () => ($("options").hidden = !$("options").hidden));

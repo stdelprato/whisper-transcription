@@ -308,7 +308,13 @@ fn start(app: AppHandle, state: State<'_, AppState>, path: String, opts: UiOptio
         running.store(false, Ordering::SeqCst);
         match result {
             Ok(t) => {
-                save_result(&t);
+                // Una corrida detenida a mitad no se guarda: el archivo en disco es lo
+                // que hace que el navegador marque el audio como hecho, y media
+                // transcripción no está hecha. Queda igual a la vista para exportarla
+                // si sirve, y no pisa un resultado completo anterior.
+                if !t.cancelled {
+                    save_result(&t);
+                }
                 if let Some(state) = app.try_state::<AppState>() {
                     *state
                         .transcript

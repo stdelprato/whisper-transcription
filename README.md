@@ -89,16 +89,18 @@ tres cosas a la vez:
 
 ## Compilar
 
-Hace falta Rust 1.88 o superior, MSVC y CMake (`ct2rs` compila CTranslate2).
+Hace falta Rust 1.88 o superior y MSVC. También CMake, porque `ct2rs` compila
+CTranslate2 desde fuente: si no está en el PATH, `scripts\setup.ps1` baja una copia
+portable en `tools\cmake` en vez de pedir el instalador oficial, que necesita admin.
 
 ```bat
-set RUSTFLAGS=-C target-feature=+crt-static
 cargo build --release
 ```
 
-`RUSTFLAGS` no es opcional: `ct2rs` enlaza la CRT estática y sin eso el enlazado falla
-con `LNK2038`. `sherpa-onnx` va por enlazado dinámico (`features = ["shared"]`) porque sus
-bibliotecas estáticas precompiladas piden un MSVC más nuevo del que hay acá.
+El `-C target-feature=+crt-static` que pide `ct2rs` está en [`.cargo/config.toml`](.cargo/config.toml),
+así que no hay que acordarse de ponerlo: sin eso el enlazado falla con `LNK2038`.
+`sherpa-onnx` va por enlazado dinámico (`features = ["shared"]`) porque sus bibliotecas
+estáticas precompiladas piden un MSVC más nuevo del que hay acá.
 
 Para probar el núcleo sin interfaz:
 

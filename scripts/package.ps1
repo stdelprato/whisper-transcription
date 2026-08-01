@@ -1,4 +1,4 @@
-# Arma la carpeta que se le pasa a la usuaria: se copia y se abre el .exe. Sin instalador,
+﻿# Arma la carpeta que se le pasa a la usuaria: se copia y se abre el .exe. Sin instalador,
 # sin permisos de administrador, sin tocar el registro.
 #
 #   .\scripts\package.ps1 [-Target C:\ruta\de\salida] [-SkipBuild] [-SinModelos]
@@ -9,10 +9,17 @@
 # rápido que un servicio de archivos.
 
 param(
-  [string]$Target = "$PSScriptRoot\..\dist\Transcriptor",
+  [string]$Target,
   [switch]$SkipBuild,
   [switch]$SinModelos
 )
+
+# Cada variante tiene su carpeta. Si las dos escribieran en la misma, -SinModelos
+# actualizaria el .exe de la entrega completa y dejaria el liviano viejo sin avisar.
+if (-not $Target) {
+  $Target = if ($SinModelos) { "$PSScriptRoot\..\dist\Transcriptor-liviano" }
+            else             { "$PSScriptRoot\..\dist\Transcriptor" }
+}
 
 $ErrorActionPreference = "Stop"
 $root = Resolve-Path "$PSScriptRoot\.."

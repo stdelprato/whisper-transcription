@@ -1,0 +1,6 @@
+# ct2rs (y sentencepiece-sys, que trae abajo) enlazan la CRT estática de MSVC.
+# Sin esto el enlazado falla con símbolos duplicados en cuanto alguien hace
+# `cargo build` o `cargo test` en una consola limpia, sin pasar por setup.ps1.
+# La variable de entorno RUSTFLAGS, si está puesta, gana sobre esto y vale lo mismo.
+[build]
+rustflags = ["-C", "target-feature=+crt-static"]

@@ -1,4 +1,4 @@
-# Descarga los modelos. Son ~3,2 GB; tarda según la conexión.
+﻿# Descarga los modelos. Son ~3,2 GB; tarda según la conexión.
 # No hace falta Python ni nada más: todo viene ya cuantizado a int8.
 #
 #   .\scripts\get-models.ps1              desde el repo

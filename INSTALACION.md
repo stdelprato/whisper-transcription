@@ -9,18 +9,21 @@ Hay dos máquinas con papeles distintos:
 
 ## En tu máquina
 
-### 1. Instalar tres cosas a mano
+### 1. Instalar dos cosas a mano
 
-Solo estas tres; el resto lo hace el script.
+Solo estas dos; el resto lo hace el script.
 
 | qué | de dónde | nota |
 |---|---|---|
 | **Rust 1.88+** | <https://rustup.rs> | aceptá la opción por defecto. Si ya lo tenés: `rustup update stable` |
 | **Herramientas de C++ de Visual Studio** | <https://visualstudio.microsoft.com/visual-cpp-build-tools/> | en el instalador marcá **«Desarrollo para el escritorio con C++»** |
-| **CMake** | <https://cmake.org/download/> | marcá **«Add CMake to the system PATH»** |
 
-Las dos últimas hacen falta porque CTranslate2 (el motor de traducción) se compila
-desde fuente. No hay una versión precompilada para Rust en Windows.
+La segunda hace falta porque CTranslate2 (el motor de traducción) se compila desde
+fuente. No hay una versión precompilada para Rust en Windows.
+
+CMake también hace falta, pero **no lo instales**: el script se baja una copia portable
+en `tools\cmake` y la usa solo para compilar. El instalador oficial de CMake pide
+permisos de administrador y se queda colgado si nadie los aprueba.
 
 Para ver qué te falta sin tocar nada:
 
